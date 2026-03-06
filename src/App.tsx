@@ -138,47 +138,6 @@ export default function App() {
   const [showSummary, setShowSummary] = useState(false);
   const [globalFeedbackStats, setGlobalFeedbackStats] = useState({ hard: 0, medium: 0, easy: 0 });
 
-useEffect(() => {
-  if (uploadData.length > 0 && uploadMeta.title === '') {
-    const generateTitle = async () => {
-      try {
-        const prompt = `다음 단어들을 보고 적절한 단어장 제목을 하나만 추천해줘: ${uploadData
-          .slice(0, 5)
-          .map(c => c.term)
-          .join(', ')}`;
-
-        const response = await fetch('/api/ai/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt }),
-        });
-
-        const raw = await response.text();
-
-        if (!response.ok) {
-          console.error('Failed to generate title:', response.status, raw);
-          return;
-        }
-
-        if (!raw.trim()) {
-          console.error('AI generate returned empty body');
-          return;
-        }
-
-        const data = JSON.parse(raw);
-
-        if (data?.text) {
-          setUploadMeta(prev => ({ ...prev, title: data.text.trim() }));
-        }
-      } catch (error) {
-        console.error('Title generation error:', error);
-      }
-    };
-
-    generateTitle();
-  }
-}, [uploadData, uploadMeta.title]);
-
   useEffect(() => {
     fetchUser();
     fetchDecks();

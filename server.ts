@@ -141,6 +141,23 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  app.post("/api/decks", (req, res) => {
+    const { title, description, category, cards } = req.body;
+    const user = db.prepare("SELECT id FROM users LIMIT 1").get() as { id: number };
+    
+    const deckResult = db.prepare("INSERT INTO decks (user_id, title, description, category) VALUES (?, ?, ?, ?)").run(
+      user.id, title, description, category
+    );
+    const deckId = deckResult.lastInsertRowid;
+    
+    const insertCard = db.prepare("INSERT INTO cards (deck_id, term, meaning, example, category, difficulty, source) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    for (const card of cards) {
+      insertCard.run(deckId, card.term, card.meaning, card.example, card.category, card.difficulty || 'medium', card.source || '');
+    }
+    
+    res.json({ success: true, deckId });
+  });
+
   app.post("/api/decks/generate", async (req, res) => {
     const { cards } = req.body;
     const prompt = `Based on these cards, generate a concise title and a short description for a vocabulary deck.
