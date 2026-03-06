@@ -828,9 +828,14 @@ export default function App() {
                 )}>
                   <div className="text-xs font-bold text-indigo-500 uppercase tracking-widest mb-4">TERM</div>
                   <h2 className="text-5xl font-bold text-slate-900 mb-8">{card.term}</h2>
-                  <Button variant="ghost" size="sm" className="text-slate-400" onClick={(e) => { e.stopPropagation(); speak(card.term); }}>
-                    <Volume2 className="w-5 h-5" />
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" className="text-slate-400" onClick={(e) => { e.stopPropagation(); speak(card.term); }}>
+                      <Volume2 className="w-5 h-5" />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-indigo-600 font-bold" onClick={(e) => { e.stopPropagation(); speak(card.term); }}>
+                      음성 듣기
+                    </Button>
+                  </div>
                   <div className="absolute bottom-8 text-slate-300 text-sm flex items-center gap-2">
                     <HelpCircle className="w-4 h-4" /> 클릭하여 뜻 확인
                   </div>
@@ -842,7 +847,7 @@ export default function App() {
                   !isFlipped && "pointer-events-none"
                 )}>
                   <div className="text-xs font-bold text-indigo-500 uppercase tracking-widest mb-4">MEANING</div>
-                  <h2 className="text-3xl font-bold text-slate-900 mb-6">{card.meaning}</h2>
+                  <h2 className="text-5xl font-bold text-slate-900 mb-6">{card.meaning}</h2>
                   {card.example && (
                     <div className="bg-white/60 p-4 rounded-2xl border border-indigo-100 max-w-sm">
                       <p className="text-slate-600 italic text-sm">"{card.example}"</p>
