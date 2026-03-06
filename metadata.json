@@ -1,0 +1,5 @@
+{
+  "name": "PulleyVocab: Nursing NCLEX",
+  "description": "A specialized vocabulary learning app for nursing students preparing for NCLEX and medical English exams. Features Excel upload, SRS flashcards, and study groups.",
+  "requestFramePermissions": []
+}
