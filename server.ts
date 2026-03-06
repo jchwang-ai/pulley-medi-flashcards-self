@@ -93,6 +93,9 @@ if (userCount.count === 0) {
     { term: "Palpation", meaning: "촉진 (손으로 만져서 진찰하는 것)", example: "Palpation of the abdomen revealed tenderness.", category: "Assessment", difficulty: "medium", source: "NCLEX" },
     { term: "Cyanosis", meaning: "청색증", example: "The patient's lips showed signs of cyanosis.", category: "Respiratory", difficulty: "medium", source: "NCLEX" },
     { term: "Dyspnea", meaning: "호흡곤란", example: "The patient complained of severe dyspnea.", category: "Respiratory", difficulty: "medium", source: "NCLEX" },
+    { term: "Hypertension", meaning: "고혈압", example: "Uncontrolled hypertension can lead to stroke.", category: "Cardiac", difficulty: "medium", source: "NCLEX" },
+    { term: "Edema", meaning: "부종", example: "The patient has pitting edema in the lower extremities.", category: "General", difficulty: "easy", source: "NCLEX" },
+    { term: "Ischemia", meaning: "허혈 (혈류 부족)", example: "Myocardial ischemia can cause chest pain.", category: "Cardiac", difficulty: "hard", source: "NCLEX" },
   ];
 
   const insertCard = db.prepare("INSERT INTO cards (deck_id, term, meaning, example, category, difficulty, source) VALUES (?, ?, ?, ?, ?, ?, ?)");
