@@ -120,12 +120,20 @@ async function startServer() {
     const decks = db.prepare(`
       SELECT d.*, 
              COUNT(c.id) as cardCount,
-             COUNT(CASE WHEN s.status = 'easy' THEN 1 END) as easyCount,
-             COUNT(CASE WHEN s.status = 'medium' THEN 1 END) as mediumCount,
-             COUNT(CASE WHEN s.status = 'hard' THEN 1 END) as hardCount
+             COUNT(CASE WHEN latest_s.status = 'easy' THEN 1 END) as easyCount,
+             COUNT(CASE WHEN latest_s.status = 'medium' THEN 1 END) as mediumCount,
+             COUNT(CASE WHEN latest_s.status = 'hard' THEN 1 END) as hardCount
       FROM decks d 
       LEFT JOIN cards c ON d.id = c.deck_id 
-      LEFT JOIN study_sessions s ON c.id = s.card_id
+      LEFT JOIN (
+          SELECT card_id, status
+          FROM study_sessions
+          WHERE id IN (
+              SELECT MAX(id)
+              FROM study_sessions
+              GROUP BY card_id
+          )
+      ) latest_s ON c.id = latest_s.card_id
       GROUP BY d.id
     `).all() as any[];
 
@@ -155,12 +163,12 @@ async function startServer() {
     const user = db.prepare("SELECT id FROM users LIMIT 1").get() as { id: number };
     
     const deckResult = db.prepare("INSERT INTO decks (user_id, title, description, category) VALUES (?, ?, ?, ?)").run(
-      user.id, title, description || `${(cards || []).length}개의 단어가 포함된 단어장`, category
+      user.id, title, description || `${cards.length}개의 단어가 포함된 단어장`, category
     );
     const deckId = deckResult.lastInsertRowid;
     
     const insertCard = db.prepare("INSERT INTO cards (deck_id, term, meaning, example, category, difficulty, source) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    for (const card of (cards || [])) {
+    for (const card of cards) {
       insertCard.run(deckId, card.term, card.meaning, card.example, card.category, card.difficulty || 'medium', card.source || '');
     }
     
@@ -181,6 +189,17 @@ async function startServer() {
     });
     
     res.json(JSON.parse(response.text || '{}'));
+  });
+
+  app.get("/api/decks/:id", (req, res) => {
+    const { id } = req.params;
+    const deck = db.prepare("SELECT * FROM decks WHERE id = ?").get(id);
+    if (!deck) {
+      res.status(404).json({ error: "Deck not found" });
+      return;
+    }
+    const cards = db.prepare("SELECT * FROM cards WHERE deck_id = ?").all(id) as any[];
+    res.json({ ...(deck as any), words: cards });
   });
 
   app.get("/api/decks/:id/cards", (req, res) => {
@@ -249,8 +268,30 @@ async function startServer() {
 
     // Update user XP
     db.prepare("UPDATE users SET xp = xp + 10 WHERE id = ?").run(user.id);
+    
+    console.log(`[DEBUG] Feedback saved: cardId=${cardId}, feedback=${feedback}, user=${user.id}`);
 
     res.json({ success: true, nextReview: nextReviewStr });
+  });
+
+  app.get("/api/study/status/:status", (req, res) => {
+    const { status } = req.params;
+    const user = db.prepare("SELECT id FROM users LIMIT 1").get() as { id: number };
+    
+    // Debug: print all statuses
+    const allStatuses = db.prepare("SELECT status, COUNT(*) as count FROM study_sessions WHERE user_id = ? GROUP BY status").all(user.id);
+    console.log(`[DEBUG] All statuses for user ${user.id}:`, allStatuses);
+
+    // Ensure we only get cards that have a study session with the matching status for this user
+    const cards = db.prepare(`
+      SELECT c.*, s.status 
+      FROM cards c
+      JOIN study_sessions s ON c.id = s.card_id
+      WHERE s.user_id = ? AND LOWER(s.status) = LOWER(?)
+    `).all(user.id, status);
+    
+    console.log(`[DEBUG] Found ${cards.length} cards for status ${status} for user ${user.id}`);
+    res.json(cards);
   });
 
   // Vite middleware for development

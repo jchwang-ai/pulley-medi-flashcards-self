@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { GoogleGenAI } from "@google/genai";
 import {
   BookOpen,
   Plus,
@@ -15,9 +16,13 @@ import {
   Flame,
   MoreVertical,
   ArrowLeft,
-  HelpCircle
+  HelpCircle,
+  ChevronLeft,
+  Pencil,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import * as XLSX from 'xlsx';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -34,6 +39,7 @@ interface Card {
   category?: string;
   difficulty?: string;
   source?: string;
+  deckId?: number;
 }
 
 interface Deck {
@@ -46,6 +52,7 @@ interface Deck {
   mediumCount: number;
   hardCount: number;
   previewCards: { term: string }[];
+  words: { term: string; meaning: string; example: string }[];
 }
 
 interface User {
@@ -104,7 +111,7 @@ const CardUI = ({
   onClick?: () => void;
 }) => (
   <div
-    className={cn('bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden', className)}
+    className={cn('bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col', className)}
     onClick={onClick}
   >
     {children}
@@ -122,7 +129,8 @@ const ProgressBar = ({ progress, color = 'bg-indigo-600' }: { progress: number; 
 );
 
 export default function App() {
-  const [view, setView] = useState<'dashboard' | 'decks' | 'study' | 'groups' | 'reports' | 'upload'>('dashboard');
+  const [view, setView] = useState<'home' | 'decks' | 'study' | 'groups' | 'reports' | 'upload'>('home');
+  const [deckFilter, setDeckFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [uploadMode, setUploadMode] = useState<'file' | 'paste'>('paste');
   const [isLoading, setIsLoading] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -130,19 +138,150 @@ export default function App() {
   const [studyCards, setStudyCards] = useState<Card[]>([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [uploadData, setUploadData] = useState<Card[]>([]);
+  const [uploadData, setUploadData] = useState<Card[]>([{ term: '', meaning: '', example: '', category: '', difficulty: 'medium', source: '' }]);
   const [uploadMeta, setUploadMeta] = useState({ title: '', category: 'General' });
   const [activeMenuDeck, setActiveMenuDeck] = useState<Deck | null>(null);
+  const [dailyGoal, setDailyGoal] = useState(() => {
+    const saved = localStorage.getItem('dailyGoal');
+    return saved ? Number(saved) : 10;
+  });
+  const [isEditingGoal, setIsEditingGoal] = useState(false);
+  const [tempGoal, setTempGoal] = useState(dailyGoal);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+
+  const getTodayString = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
+
+  const [studyDates, setStudyDates] = useState<string[]>(() => {
+    const saved = localStorage.getItem('studyDates');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [streak, setStreak] = useState(0);
+
+  const calculateStreak = (dates: string[]) => {
+    if (!dates.length) return 0;
+
+    const uniqueDates = [...new Set(dates)].sort((a, b) => (a < b ? 1 : -1));
+    let count = 0;
+
+    const current = new Date();
+    current.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < uniqueDates.length; i++) {
+      const expected = new Date(current);
+      expected.setDate(current.getDate() - i);
+
+      const expectedString = expected.toISOString().split('T')[0];
+
+      if (uniqueDates[i] === expectedString) {
+        count += 1;
+      } else {
+        break;
+      }
+    }
+
+    return count;
+  };
+
+  const getMonthCalendarCells = (monthDate: Date, dates: string[]) => {
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    
+    const firstDay = new Date(year, month, 1).getDay(); // 0 (Sun) - 6 (Sat)
+    // Convert to 0 (Mon) - 6 (Sun)
+    const startDay = firstDay === 0 ? 6 : firstDay - 1;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    const cells = [];
+    
+    // Leading blanks
+    for (let i = 0; i < startDay; i++) {
+      cells.push({ day: null, dateString: null, isStudied: false, isCurrentMonth: false });
+    }
+    
+    // Days
+    for (let i = 1; i <= daysInMonth; i++) {
+      const date = new Date(year, month, i);
+      const dateString = date.toISOString().split('T')[0];
+      cells.push({
+        day: i,
+        dateString,
+        isStudied: dates.includes(dateString),
+        isCurrentMonth: true
+      });
+    }
+    
+    return cells;
+  };
+
+  const calendarCells = getMonthCalendarCells(currentMonth, studyDates);
+  const studiedDaysInMonth = calendarCells.filter(c => c.isStudied).length;
+
+  const changeMonth = (delta: number) => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1));
+  };
+
+  useEffect(() => {
+    localStorage.setItem('studyDates', JSON.stringify(studyDates));
+    setStreak(calculateStreak(studyDates));
+  }, [studyDates]);
+
+  const markStudyCompleteToday = () => {
+    const today = getTodayString();
+    setStudyDates(prev => {
+      if (prev.includes(today)) return prev;
+      return [...prev, today];
+    });
+  };
+
+  useEffect(() => {
+    localStorage.setItem('dailyGoal', String(dailyGoal));
+    setTempGoal(dailyGoal);
+  }, [dailyGoal]);
   const [feedbackStats, setFeedbackStats] = useState({ hard: 0, medium: 0, easy: 0 });
   const [sessionFeedback, setSessionFeedback] = useState<Map<number, 'easy' | 'medium' | 'hard'>>(new Map());
   const [originalStudyCards, setOriginalStudyCards] = useState<Card[]>([]);
   const [showSummary, setShowSummary] = useState(false);
-  const [globalFeedbackStats, setGlobalFeedbackStats] = useState({ hard: 0, medium: 0, easy: 0 });
+  const [reviewBuckets, setReviewBuckets] = useState<{ hard: Card[]; medium: Card[]; easy: Card[] }>(() => {
+    const saved = localStorage.getItem('reviewBuckets');
+    return saved
+      ? JSON.parse(saved)
+      : { hard: [], medium: [], easy: [] };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('reviewBuckets', JSON.stringify(reviewBuckets));
+  }, [reviewBuckets]);
+
+  useEffect(() => {
+    if (view === 'upload' && uploadData.length === 0) {
+      setUploadData([
+        {
+          term: '',
+          meaning: '',
+          example: '',
+          category: '',
+          difficulty: 'medium',
+          source: ''
+        }
+      ]);
+    }
+  }, [view]);
 
   useEffect(() => {
     fetchUser();
     fetchDecks();
   }, []);
+
+  useEffect(() => {
+    if (view === 'home' || view === 'decks') {
+      fetchUser();
+      fetchDecks();
+    }
+  }, [view]);
 
   const fetchUser = async () => {
     try {
@@ -159,57 +298,73 @@ export default function App() {
   };
 
   const fetchDecks = async () => {
-  try {
-    const res = await fetch('/api/decks');
-    if (!res.ok) {
+    try {
+      const res = await fetch('/api/decks');
+      if (!res.ok) {
+        setDecks([]);
+        return;
+      }
+
+      const data = await res.json();
+      console.log('Fetched decks data:', data);
+
+      const mappedDecks: Deck[] = (Array.isArray(data) ? data : []).map((deck: any) => {
+        const words = Array.isArray(deck.words) ? deck.words : [];
+        const easyCount = deck.easyCount || words.filter((w: any) => w.status === 'easy').length;
+        const mediumCount = deck.mediumCount || words.filter((w: any) => w.status === 'medium').length;
+        const hardCount = deck.hardCount || words.filter((w: any) => w.status === 'hard').length;
+
+        return {
+          id: Number(deck.id),
+          title: deck.title || '새 단어장',
+          description: deck.description || `${deck.cardCount}개의 단어가 포함된 단어장`,
+          category: deck.category || 'General',
+          cardCount: deck.cardCount || words.length,
+          easyCount,
+          mediumCount,
+          hardCount,
+          previewCards: deck.previewCards || [],
+          words: deck.words || [],
+        };
+      });
+
+      setDecks(mappedDecks);
+    } catch (error) {
+      console.error('fetchDecks error:', error);
       setDecks([]);
-      return;
     }
-
-    const data = await res.json();
-
-    const mappedDecks: Deck[] = (Array.isArray(data) ? data : []).map((deck: any) => {
-      const words = Array.isArray(deck.words) ? deck.words : [];
-
-      return {
-        id: Number(deck.id),
-        title: deck.name || '새 단어장',
-        description: `${words.length}개의 단어가 포함된 단어장`,
-        category: deck.category || 'General',
-        cardCount: words.length,
-        easyCount: 0,
-        mediumCount: 0,
-        hardCount: 0,
-        previewCards: words.slice(0, 3).map((word: any) => ({
-          term: word?.term || '',
-        })),
-      };
-    });
-
-    setDecks(mappedDecks);
-  } catch (error) {
-    console.error('fetchDecks error:', error);
-    setDecks([]);
-  }
-};
+  };
 
   const startStudy = async (deckId?: number) => {
     try {
       setIsLoading(true);
 
-      const selected = decks.find((d) => d.id === deckId);
-      const previewTerms = selected?.previewCards || [];
+      let studyTerms = [];
+      if (deckId) {
+        const res = await fetch(`/api/decks/${deckId}`);
+        if (res.ok) {
+          const deck = await res.json();
+          studyTerms = deck.words || [];
+        } else {
+          const selected = decks.find((d) => d.id === deckId);
+          studyTerms = selected?.words || [];
+        }
+      } else {
+        const selected = decks.find((d) => d.id === deckId);
+        studyTerms = selected?.words || [];
+      }
 
-      const mockCards: Card[] = previewTerms.length
-        ? previewTerms.map((p, index) => ({
-            id: index + 1,
+      const mockCards: Card[] = studyTerms.length
+        ? studyTerms.map((p: any, index: number) => ({
+            id: p.id || index + 1,
             term: p.term,
-            meaning: `${p.term}의 뜻`,
-            example: `${p.term} example sentence`,
+            meaning: p.meaning,
+            example: p.example,
+            deckId: deckId,
           }))
         : [
-            { id: 1, term: 'Hypoxia', meaning: '저산소증', example: 'Cyanosis is a late sign of hypoxia.' },
-            { id: 2, term: 'Bradycardia', meaning: '서맥', example: 'The patient developed bradycardia.' },
+            { id: 1, term: 'Hypoxia', meaning: '저산소증', example: 'Cyanosis is a late sign of hypoxia.', deckId: deckId },
+            { id: 2, term: 'Bradycardia', meaning: '서맥', example: 'The patient developed bradycardia.', deckId: deckId },
           ];
 
       setStudyCards(mockCards);
@@ -217,7 +372,9 @@ export default function App() {
       setCurrentCardIndex(0);
       setIsFlipped(false);
       setView('study');
+      
       setFeedbackStats({ hard: 0, medium: 0, easy: 0 });
+      
       setSessionFeedback(new Map());
       setShowSummary(false);
     } catch (error) {
@@ -236,31 +393,49 @@ export default function App() {
 
     setFeedbackStats((prev) => {
       const next = { ...prev };
-      if (oldFeedback) {
-        next[oldFeedback] = Math.max(0, next[oldFeedback] - 1);
+      if (oldFeedback && next[oldFeedback] > 0) {
+        next[oldFeedback] = next[oldFeedback] - 1;
       }
       next[feedback] = next[feedback] + 1;
       return next;
     });
 
-    setGlobalFeedbackStats((prev) => {
-      const next = { ...prev };
-      if (oldFeedback) {
-        next[oldFeedback] = Math.max(0, next[oldFeedback] - 1);
-      }
-      next[feedback] = next[feedback] + 1;
+    setReviewBuckets(prev => {
+      const removeCard = (list: Card[]) => list.filter(item => item.id !== card.id);
+
+      const next = {
+        hard: removeCard(prev.hard),
+        medium: removeCard(prev.medium),
+        easy: removeCard(prev.easy),
+      };
+
+      next[feedback] = [...next[feedback], card];
       return next;
     });
 
     setSessionFeedback((prev) => new Map(prev).set(card.id || 0, feedback));
 
+    try {
+      await fetch('/api/study/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardId: card.id, status: feedback }),
+      });
+    } catch (error) {
+      console.error('Failed to save feedback:', error);
+    }
+
     if (currentCardIndex < studyCards.length - 1) {
       setCurrentCardIndex((prev) => prev + 1);
       setIsFlipped(false);
     } else {
+      markStudyCompleteToday();
       setShowSummary(true);
     }
   };
+
+  const [filteredCards, setFilteredCards] = useState<Card[]>([]);
+  const [isFiltering, setIsFiltering] = useState(false);
 
   const restartStudy = (onlyReview: boolean, category?: 'hard' | 'medium' | 'easy') => {
     let cardsToStudy = originalStudyCards;
@@ -278,6 +453,13 @@ export default function App() {
     setCurrentCardIndex(0);
     setShowSummary(false);
     setIsFlipped(false);
+  };
+
+  const showFilteredCards = (category: 'hard' | 'medium' | 'easy') => {
+    const cardsToStudy = originalStudyCards.filter((card) => sessionFeedback.get(card.id || 0) === category);
+    setFilteredCards(cardsToStudy);
+    setIsFiltering(true);
+    setShowSummary(false);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -309,39 +491,40 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
- const saveDeck = async () => {
-  if (!uploadMeta.title) {
-    alert('단어장 제목을 입력해주세요.');
-    return;
-  }
-
-  try {
-    const res = await fetch('/api/decks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: uploadMeta.title,
-        cards: uploadData,
-        category: uploadMeta.category
-      }),
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error('saveDeck error:', errorText);
-      alert('단어장 저장 중 오류가 발생했습니다.');
+  const saveDeck = async () => {
+    if (!uploadMeta.title) {
+      alert('단어장 제목을 입력해주세요.');
       return;
     }
 
-    await fetchDecks();
-    setView('decks');
-    setUploadData([]);
-    setUploadMeta({ title: '', category: 'General' });
-  } catch (error) {
-    console.error('saveDeck error:', error);
-    alert('단어장 저장 중 오류가 발생했습니다.');
-  }
-};
+    try {
+      const res = await fetch('/api/decks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: uploadMeta.title,
+          description: '', // Add description if needed or handle it
+          category: uploadMeta.category,
+          cards: uploadData
+        }),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('saveDeck error:', errorText);
+        alert('단어장 저장 중 오류가 발생했습니다.');
+        return;
+      }
+
+      await fetchDecks();
+      setView('decks');
+      setUploadData([]);
+      setUploadMeta({ title: '', category: 'General' });
+    } catch (error) {
+      console.error('saveDeck error:', error);
+      alert('단어장 저장 중 오류가 발생했습니다.');
+    }
+  };
 
   const speak = (text: string) => {
     const utterance = new SpeechSynthesisUtterance(text);
@@ -349,69 +532,171 @@ export default function App() {
     window.speechSynthesis.speak(utterance);
   };
 
-  const renderDashboard = () => (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">안녕하세요, {user?.name}!</h1>
-          <p className="text-slate-500">오늘도 간호학 마스터를 향해 한 걸음 더.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-full font-bold">
-            <Flame className="w-4 h-4" />
-            {user?.streak}일
-          </div>
-          <div className="flex items-center gap-1 bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-full font-bold">
-            <Trophy className="w-4 h-4" />
-            {user?.xp} XP
-          </div>
-        </div>
-      </header>
+  const startReviewFromBucket = (type: 'hard' | 'medium' | 'easy') => {
+    const cards = reviewBuckets[type] || [];
+    if (cards.length === 0) {
+      alert('학습할 카드가 없습니다.');
+      return;
+    }
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <CardUI className="md:col-span-2 p-6 bg-gradient-to-br from-indigo-600 to-violet-700 text-white border-none">
-          <div className="flex flex-col h-full justify-between">
-            <div>
-              <h2 className="text-xl font-bold mb-2">학습 현황</h2>
-              <p className="text-indigo-100 mb-6">총 {decks.length}개의 단어장을 학습하고 있습니다.</p>
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="bg-white/10 p-3 rounded-xl">
-                  <div className="text-2xl font-bold">{globalFeedbackStats.hard}</div>
-                  <div className="text-xs text-indigo-200">모르겠음</div>
-                </div>
-                <div className="bg-white/10 p-3 rounded-xl">
-                  <div className="text-2xl font-bold">{globalFeedbackStats.medium}</div>
-                  <div className="text-xs text-indigo-200">헷갈림</div>
-                </div>
-                <div className="bg-white/10 p-3 rounded-xl">
-                  <div className="text-2xl font-bold">{globalFeedbackStats.easy}</div>
-                  <div className="text-xs text-indigo-200">알겠음</div>
-                </div>
-              </div>
+    setStudyCards(cards);
+    setOriginalStudyCards(cards);
+    setCurrentCardIndex(0);
+    setIsFlipped(false);
+    setView('study');
+    setFeedbackStats({ hard: 0, medium: 0, easy: 0 });
+    setSessionFeedback(new Map());
+    setShowSummary(false);
+  };
+
+  const renderHome = () => {
+    const totalWords = Array.isArray(decks) ? decks.reduce((acc, deck) => acc + (deck.cardCount || 0), 0) : 0;
+    const easyWords = Array.isArray(reviewBuckets?.easy) ? reviewBuckets.easy.length : 0;
+    const hardWords = Array.isArray(reviewBuckets?.hard) ? reviewBuckets.hard.length : 0;
+    const mediumWords = Array.isArray(reviewBuckets?.medium) ? reviewBuckets.medium.length : 0;
+    const unstudiedWords = Math.max(0, totalWords - (easyWords + hardWords + mediumWords));
+
+    const completedDecks = Array.isArray(decks) ? decks.filter(deck => {
+      const progress = getDeckProgress(deck.id, deck.cardCount || 0);
+      return progress.easy === (deck.cardCount || 0) && (deck.cardCount || 0) > 0;
+    }).length : 0;
+    const activeDecks = Array.isArray(decks) ? decks.filter(deck => {
+      const progress = getDeckProgress(deck.id, deck.cardCount || 0);
+      return progress.easy < (deck.cardCount || 0) && (deck.cardCount || 0) > 0;
+    }).length : 0;
+    const notStartedDecks = Array.isArray(decks) ? decks.filter(deck => {
+      const progress = getDeckProgress(deck.id, deck.cardCount || 0);
+      return (deck.cardCount || 0) > 0 && progress.easy === 0 && progress.medium === 0 && progress.hard === (deck.cardCount || 0);
+    }).length : 0;
+
+    const unstudiedPercent = totalWords > 0 ? (unstudiedWords / totalWords) * 100 : 0;
+    const unknownPercent = totalWords > 0 ? (hardWords / totalWords) * 100 : 0;
+    const confusingPercent = totalWords > 0 ? (mediumWords / totalWords) * 100 : 0;
+    const knownPercent = totalWords > 0 ? (easyWords / totalWords) * 100 : 0;
+
+    return (
+      <div className="space-y-8">
+        {/* 1. Greeting + Learning streak + AI Coach */}
+        <div className="flex flex-col md:flex-row gap-6">
+          <header className="flex-1">
+            <h1 className="text-2xl font-bold text-slate-900">안녕하세요, {user?.name || 'Nursing Student'}!</h1>
+            <div className="flex items-center gap-1.5 text-indigo-600 font-bold mt-2 bg-indigo-50 px-3 py-1.5 rounded-full w-fit">
+              <Flame className="w-5 h-5" />
+              <span>{streak}일 연속 학습 중! 학습 습관이 만들어지고 있어요.</span>
             </div>
-            <Button variant="secondary" size="lg" className="w-full md:w-auto self-start mt-6" onClick={() => setView('decks')}>
-              학습 시작하기
-            </Button>
+          </header>
+          <CardUI className="p-4 bg-slate-50 border-slate-100 flex-1">
+            <p className="text-sm text-slate-600 font-medium">오늘은 헷갈리는 단어 5개만 더 복습하면 이번 주 목표를 달성할 수 있어요!</p>
+          </CardUI>
+        </div>
+
+        {/* 2. Learning Status Summary */}
+        <CardUI className="p-6">
+          <h2 className="text-lg font-bold text-slate-900 mb-4">나의 단어 이해 상태</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-[#E5E7EB] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => { setView('decks'); setDeckFilter('active'); }}>
+              <div className="text-sm text-slate-600 font-bold">미학습</div>
+              <div className="text-3xl font-bold text-slate-900">{unstudiedWords}</div>
+            </div>
+            <div className="bg-[#9CA3AF] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => startReviewFromBucket('hard')}>
+              <div className="text-sm text-white font-bold">모르겠음</div>
+              <div className="text-3xl font-bold text-white">{hardWords}</div>
+            </div>
+            <div className="bg-[#F59E0B] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => startReviewFromBucket('medium')}>
+              <div className="text-sm text-white font-bold">헷갈림</div>
+              <div className="text-3xl font-bold text-white">{mediumWords}</div>
+            </div>
+            <div className="bg-[#10B981] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => startReviewFromBucket('easy')}>
+              <div className="text-sm text-white font-bold">알겠음</div>
+              <div className="text-3xl font-bold text-white">{easyWords}</div>
+            </div>
+          </div>
+          <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex mb-4">
+            <div className="h-full" style={{ width: `${unstudiedPercent}%`, backgroundColor: '#E5E7EB' }} />
+            <div className="h-full" style={{ width: `${unknownPercent}%`, backgroundColor: '#9CA3AF' }} />
+            <div className="h-full" style={{ width: `${confusingPercent}%`, backgroundColor: '#F59E0B' }} />
+            <div className="h-full" style={{ width: `${knownPercent}%`, backgroundColor: '#10B981' }} />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-slate-500 mb-6 font-medium">
+            <div className="flex flex-col"><span>미학습</span><span className="text-slate-900 font-bold">{unstudiedWords}개 ({Math.round(unstudiedPercent)}%)</span></div>
+            <div className="flex flex-col"><span>모르겠음</span><span className="text-slate-900 font-bold">{hardWords}개 ({Math.round(unknownPercent)}%)</span></div>
+            <div className="flex flex-col"><span>헷갈림</span><span className="text-slate-900 font-bold">{mediumWords}개 ({Math.round(confusingPercent)}%)</span></div>
+            <div className="flex flex-col"><span>알겠음</span><span className="text-slate-900 font-bold">{easyWords}개 ({Math.round(knownPercent)}%)</span></div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {/* Review buttons removed */}
           </div>
         </CardUI>
-
-        <CardUI className="p-6 h-fit">
-          <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-rose-500" />
-            취약 단어 Top 5
-          </h3>
-          <div className="space-y-3">
-            {['Hypoxia', 'Bradycardia', 'PRN', 'Auscultation', 'Triage'].map((word, i) => (
-              <div key={i} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer group">
-                <span className="text-slate-700 font-medium">{word}</span>
-                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500" />
+        
+        {/* 4. 오늘의 학습 */}
+        <CardUI className="p-6 border-indigo-100 shadow-indigo-100/50">
+          <h2 className="text-lg font-bold text-slate-900 mb-4">오늘의 학습</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="text-sm text-slate-500">오늘 목표</div>
+                {isEditingGoal ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={tempGoal}
+                      onChange={(e) => setTempGoal(Number(e.target.value))}
+                      className="w-16 px-1 text-sm border rounded"
+                    />
+                    <button onClick={() => { setDailyGoal(tempGoal); setIsEditingGoal(false); }} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded">
+                      <Check className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setIsEditingGoal(true)} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded">
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-            ))}
+              <div className="text-2xl font-bold text-slate-900 mb-4">{dailyGoal} 단어</div>
+              <div className="text-sm text-slate-500 mb-1">진행률</div>
+              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-600 transition-all duration-500" style={{ width: `${dailyGoal > 0 ? Math.min(100, (8 / dailyGoal) * 100) : 0}%` }} />
+              </div>
+              <div className="text-sm font-bold text-slate-900 mt-1">8 / {dailyGoal || 0} 완료</div>
+            </div>
+          </div>
+          <Button className="w-full mt-6" size="lg" onClick={() => setView('decks')}>학습 시작하기</Button>
+        </CardUI>
+
+        {/* 5. 내 단어장 현황 */}
+        <CardUI className="p-6">
+          <h2 className="text-lg font-bold text-slate-900 mb-4">내 단어장 현황</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 bg-slate-50 rounded-xl">
+              <div className="text-sm text-slate-600 font-bold">전체 단어장</div>
+              <div className="text-2xl font-bold text-slate-900">{decks.length}개</div>
+            </div>
+            <div className="p-4 bg-indigo-50 rounded-xl">
+              <div className="text-sm text-indigo-600 font-bold">학습중</div>
+              <div className="text-2xl font-bold text-indigo-900">{activeDecks}개</div>
+            </div>
+            <div className="p-4 bg-emerald-50 rounded-xl">
+              <div className="text-sm text-emerald-600 font-bold">완료</div>
+              <div className="text-2xl font-bold text-emerald-900">{completedDecks}개</div>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-xl">
+              <div className="text-sm text-slate-600 font-bold">시작 전</div>
+              <div className="text-2xl font-bold text-slate-900">{notStartedDecks}개</div>
+            </div>
           </div>
         </CardUI>
       </div>
-    </div>
-  );
+    );
+  };
+
+  const getDeckProgress = (deckId: number, totalCount: number) => {
+    const easy = reviewBuckets.easy.filter(card => String(card.deckId) === String(deckId)).length;
+    const medium = reviewBuckets.medium.filter(card => String(card.deckId) === String(deckId)).length;
+    const hard = Math.max(0, totalCount - easy - medium);
+
+    return { hard, medium, easy };
+  };
 
   const renderDecks = () => (
     <div className="space-y-6">
@@ -422,49 +707,104 @@ export default function App() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {(decks || []).map((deck) => (
-          <div key={deck.id}>
-<CardUI className="group hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer h-[320px] flex flex-col" onClick={() => startStudy(deck.id)}>              <div className="p-5 flex flex-col h-full">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="bg-indigo-50 text-indigo-600 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">
-                    {deck.category}
-                  </div>
-                  <button onClick={(e) => { e.stopPropagation(); setActiveMenuDeck(deck); }} className="p-1 hover:bg-slate-100 rounded">
-                    <MoreVertical className="w-4 h-4 text-slate-400" />
-                  </button>
-                </div>
-
-                <h3 className="text-lg font-bold text-slate-900 mb-1">{deck.title}</h3>
-                <p className="text-sm text-slate-500 mb-4 line-clamp-2">{deck.description}</p>
-
-                <div className="mb-4 text-xs text-slate-400">
-                  {(deck.previewCards || []).map((c) => c.term).join(', ')}
-                  {deck.cardCount > 3 && '...'}
-                </div>
-
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between text-xs text-slate-500">
-                    <span className="flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                      마스터한 단어: {deck.easyCount} / {deck.cardCount}
-                    </span>
-                    <span className="font-bold text-emerald-600">
-                      {deck.cardCount > 0 ? Math.round((deck.easyCount / deck.cardCount) * 100) : 0}%
-                    </span>
-                  </div>
-                  <ProgressBar progress={deck.cardCount > 0 ? (deck.easyCount / deck.cardCount) * 100 : 0} color="bg-emerald-500" />
-                </div>
-
-                <div className="pt-4 border-t border-slate-50 mt-auto">
-                  <Button className="w-full" onClick={() => startStudy(deck.id)}>
-                    학습하기 <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </div>
-              </div>
-            </CardUI>
-          </div>
+      <div className="flex gap-2">
+        {(['all', 'active', 'completed'] as const).map((filter) => (
+          <button
+            key={filter}
+            onClick={() => setDeckFilter(filter)}
+            className={cn(
+              "px-4 py-1.5 text-sm font-medium rounded-full transition-all",
+              deckFilter === filter
+                ? "bg-indigo-100 text-indigo-700"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            )}
+          >
+            {filter === 'all' ? '전체' : filter === 'active' ? '학습중' : '완료'}
+          </button>
         ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {(decks || []).filter(deck => {
+          const progress = getDeckProgress(deck.id, deck.cardCount);
+          if (deckFilter === 'active') return progress.easy < deck.cardCount && deck.cardCount > 0;
+          if (deckFilter === 'completed') return progress.easy === deck.cardCount && deck.cardCount > 0;
+          return true;
+        }).map((deck) => {
+          const progress = getDeckProgress(deck.id, deck.cardCount);
+          const isCompleted = progress.easy === deck.cardCount && deck.cardCount > 0;
+          return (
+            <div key={deck.id} className="relative">
+              {isCompleted && (
+                <div className="absolute -top-3 -right-3 z-10 rotate-12">
+                  <div className="bg-emerald-500 text-white font-black text-xs px-3 py-1 rounded shadow-lg border-2 border-white">
+                    PASS
+                  </div>
+                </div>
+              )}
+              <CardUI 
+                className={cn(
+                  "group hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer",
+                  isCompleted && "border-emerald-200 bg-emerald-50/30"
+                )} 
+                onClick={() => startStudy(deck.id)}
+              >
+                <div className="p-5 flex flex-col h-full">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="bg-indigo-50 text-indigo-600 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">
+                      {deck.category}
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); setActiveMenuDeck(deck); }} className="p-1 hover:bg-slate-100 rounded">
+                      <MoreVertical className="w-4 h-4 text-slate-400" />
+                    </button>
+                  </div>
+
+                  <h3 className="text-lg font-bold text-slate-900 mb-1">{deck.title}</h3>
+                  <p className="text-sm text-slate-500 mb-4 line-clamp-2">{deck.description}</p>
+
+                  <div className="mb-4 text-xs text-slate-500 bg-slate-50 p-2 rounded-lg">
+                    <span className="font-semibold text-slate-700">단어:</span> {(deck.previewCards || []).slice(0, 3).map((c) => c.term).join(', ')}
+                    {deck.cardCount > 3 && '...'}
+                  </div>
+
+                  <div className="space-y-2 mb-4">
+                    <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      <span>모르겠음 {progress.hard}</span>
+                      <span>헷갈림 {progress.medium}</span>
+                      <span>알겠음 {progress.easy}</span>
+                    </div>
+                    <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-100">
+                      <motion.div 
+                        className="bg-rose-500" 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${deck.cardCount > 0 ? (progress.hard / deck.cardCount) * 100 : 0}%` }}
+                        transition={{ duration: 0.5, ease: "easeOut" }}
+                      />
+                      <motion.div 
+                        className="bg-amber-500" 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${deck.cardCount > 0 ? (progress.medium / deck.cardCount) * 100 : 0}%` }}
+                        transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }}
+                      />
+                      <motion.div 
+                        className="bg-emerald-500" 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${deck.cardCount > 0 ? (progress.easy / deck.cardCount) * 100 : 0}%` }}
+                        transition={{ duration: 0.5, ease: "easeOut", delay: 0.2 }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-100 mt-auto">
+                    <Button className={cn("w-full shadow-lg", isCompleted ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200" : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200")} onClick={() => startStudy(deck.id)}>
+                      {isCompleted ? '다시 학습하기' : '학습하기'} <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+              </CardUI>
+            </div>
+          );
+        })}
       </div>
 
       <AnimatePresence>
@@ -484,6 +824,140 @@ export default function App() {
       </AnimatePresence>
     </div>
   );
+
+  const renderReports = () => {
+    const totalWords = decks.reduce((acc, deck) => acc + deck.cardCount, 0);
+    const easyWords = reviewBuckets.easy.length;
+    const hardWords = reviewBuckets.hard.length;
+    const mediumWords = reviewBuckets.medium.length;
+    const reviewNeeded = hardWords + mediumWords;
+
+    const data = [
+      { name: '알겠음', value: easyWords, color: '#10b981' },
+      { name: '헷갈림', value: mediumWords, color: '#f59e0b' },
+      { name: '모르겠음', value: hardWords, color: '#f43f5e' },
+    ];
+
+    return (
+      <div className="space-y-8">
+        <header>
+          <h1 className="text-2xl font-bold text-slate-900">학습 리포트</h1>
+          <p className="text-slate-500">나의 학습 상태를 한눈에 보여주는 개인 대시보드</p>
+        </header>
+
+        {/* SECTION 6: AI Coach (Moved to Top) */}
+        <CardUI className="p-6 bg-indigo-50 border-indigo-100">
+          <h3 className="font-bold text-lg text-indigo-900 mb-2">AI 학습 코치</h3>
+          <p className="text-indigo-700">"좋은 학습 페이스입니다!<br/>헷갈리는 단어를 조금만 더 복습하면<br/>이번 주 안에 단어장 하나를 완전히 마스터할 수 있어요."</p>
+        </CardUI>
+
+        {/* SECTION 1: Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <CardUI className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl"><BookOpen className="w-6 h-6" /></div>
+            <div>
+              <div className="text-sm text-slate-500">총 학습 단어</div>
+              <div className="text-lg font-bold text-slate-900">총 {totalWords}개 학습</div>
+            </div>
+          </CardUI>
+          <CardUI className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><Trophy className="w-6 h-6" /></div>
+            <div>
+              <div className="text-sm text-slate-500">마스터 단어</div>
+              <div className="text-lg font-bold text-slate-900">{easyWords}개 마스터!</div>
+            </div>
+          </CardUI>
+          <CardUI className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-rose-100 text-rose-600 rounded-xl"><AlertCircle className="w-6 h-6" /></div>
+            <div>
+              <div className="text-sm text-slate-500">복습 필요</div>
+              <div className="text-lg font-bold text-slate-900">{reviewNeeded}개 연습</div>
+            </div>
+          </CardUI>
+          <CardUI className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-orange-100 text-orange-600 rounded-xl"><Flame className="w-6 h-6" /></div>
+            <div>
+              <div className="text-sm text-slate-500">연속 학습</div>
+              <div className="text-lg font-bold text-slate-900">🔥 {streak}일 연속</div>
+            </div>
+          </CardUI>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* SECTION 2: Distribution Chart (Improved) */}
+          <CardUI className="p-6 lg:col-span-1">
+            <h3 className="font-bold text-lg text-slate-900 mb-4">나의 단어 이해도</h3>
+            <div className="space-y-4">
+              {data.map((item) => {
+                const count = item.value;
+                const percentage = totalWords > 0 ? Math.round((count / totalWords) * 100) : 0;
+                return (
+                  <div key={item.name} className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium text-slate-700">{item.name}</span>
+                      <span className="text-slate-600">{percentage}% ({count}개)</span>
+                    </div>
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${percentage}%`, backgroundColor: item.color }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="text-center text-sm text-slate-600 mt-6">"좋아요! 절반 이상의 단어를 이해하고 있어요."</div>
+          </CardUI>
+
+          {/* SECTION 3: Top 5 Hard Words */}
+          <CardUI className="p-6 lg:col-span-2">
+            <h3 className="font-bold text-lg text-slate-900 mb-4">다시 보면 좋은 단어</h3>
+            <div className="space-y-3">
+              {reviewBuckets.hard.slice(0, 5).map((card, i) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
+                  <span className="font-medium text-slate-800">{card.term}</span>
+                  <Button size="sm" variant="outline" onClick={() => startStudy(card.deckId)}>복습하기</Button>
+                </div>
+              ))}
+              {reviewBuckets.hard.length === 0 && <div className="text-slate-500 text-sm">복습할 단어가 없습니다.</div>}
+            </div>
+          </CardUI>
+        </div>
+
+        {/* SECTION 4: Activity Heatmap (Improved) */}
+        <CardUI className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-bold text-lg text-slate-900">나의 학습 활동</h3>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => changeMonth(-1)}><ChevronLeft className="w-4 h-4" /></Button>
+              <span className="font-medium text-slate-700">{currentMonth.getFullYear()}년 {currentMonth.getMonth() + 1}월</span>
+              <Button variant="outline" size="sm" onClick={() => changeMonth(1)}><ChevronRight className="w-4 h-4" /></Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-7 gap-2 text-center text-xs text-slate-500 mb-2">
+            {['월', '화', '수', '목', '금', '토', '일'].map(day => <div key={day}>{day}</div>)}
+          </div>
+          <div className="grid grid-cols-7 gap-2">
+            {calendarCells.map((cell, i) => (
+              <div 
+                key={i} 
+                className={cn(
+                  "h-8 rounded-md flex items-center justify-center text-xs",
+                  cell.day ? "bg-slate-100" : "bg-transparent",
+                  cell.isStudied ? "bg-purple-600 text-white" : "text-slate-700"
+                )}
+              >
+                {cell.day}
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-4 mt-6 text-sm text-slate-500">
+            <div className="flex items-center gap-1"><div className="w-4 h-4 bg-slate-100 rounded" /> 학습 없음</div>
+            <div className="flex items-center gap-1"><div className="w-4 h-4 bg-purple-600 rounded" /> 학습한 날</div>
+          </div>
+          <div className="text-sm text-slate-600 mt-4 font-medium">"이번 달에 {studiedDaysInMonth}일 동안 학습했어요!"</div>
+        </CardUI>
+      </div>
+    );
+  };
 
   function DeckDetailsContent({ deck, onClose, onUpdate }: { deck: Deck; onClose: () => void; onUpdate: () => void }) {
     const [isEditing, setIsEditing] = useState(false);
@@ -583,14 +1057,9 @@ export default function App() {
   };
 
   const renderUpload = () => (
-    <div className="max-w-2xl mx-auto space-y-4 py-2">
-      <div className="text-center">
-        <h2 className="text-xl font-bold text-slate-900">단어장 추가</h2>
-        <p className="text-slate-500 text-xs">새로운 단어장을 만들고 내용을 입력하세요.</p>
-      </div>
-
+    <div className="max-w-2xl mx-auto space-y-8 py-8">
       <CardUI className="p-6">
-        <h3 className="font-bold text-slate-900 mb-4 text-base">단어장 정보 설정</h3>
+        <h3 className="font-bold text-slate-900 mb-4">단어장 정보 설정</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-slate-700">제목</label>
@@ -598,35 +1067,30 @@ export default function App() {
               type="text"
               value={uploadMeta.title}
               onChange={(e) => setUploadMeta((prev) => ({ ...prev, title: e.target.value }))}
-              placeholder="단어장 제목"
-              className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-base"
+              className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
             />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-slate-700">카테고리</label>
-            <input
-              type="text"
+            <select
               value={uploadMeta.category}
               onChange={(e) => setUploadMeta((prev) => ({ ...prev, category: e.target.value }))}
-              placeholder="카테고리 입력/선택"
-              list="categories"
-              className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-base"
-            />
-            <datalist id="categories">
-              <option value="General" />
-              <option value="Anatomy" />
-              <option value="Medication" />
-              <option value="Vital Signs" />
-              <option value="Nursing Intervention" />
-            </datalist>
+              className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+            >
+              <option>General</option>
+              <option>Anatomy</option>
+              <option>Medication</option>
+              <option>Vital Signs</option>
+              <option>Nursing Intervention</option>
+            </select>
           </div>
         </div>
       </CardUI>
 
-      <div className="text-center pt-4">
-        <h3 className="font-bold text-slate-900 mb-2 text-lg">단어장 내용 넣기</h3>
-        <p className="text-slate-500 text-sm">엑셀 파일을 업로드하거나 직접 복사해서 붙여넣으세요.</p>
-        <div className="flex items-center justify-center gap-4 mt-4">
+      <div className="text-center">
+        <h2 className="text-3xl font-bold text-slate-900 mb-2">단어장 추가</h2>
+        <p className="text-slate-500">엑셀 파일을 업로드하거나 직접 복사해서 붙여넣으세요.</p>
+        <div className="flex items-center justify-center gap-4 mt-6">
           <button
             onClick={() => setUploadMode('paste')}
             className={cn(
@@ -649,13 +1113,13 @@ export default function App() {
       </div>
 
       {uploadMode === 'file' ? (
-        <CardUI className="p-8 border-dashed border-2 border-slate-200 bg-slate-50/50">
-          <div className="flex flex-col items-center justify-center py-10">
-            <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4">
-              <Upload className="w-8 h-8 text-indigo-600" />
+        <CardUI className="p-8 border-dashed border-2 border-slate-300 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50/30 transition-all duration-200">
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mb-6">
+              <Upload className="w-10 h-10 text-indigo-600" />
             </div>
-            <p className="text-slate-600 font-medium mb-1">파일을 드래그하거나 클릭하여 선택</p>
-            <p className="text-slate-400 text-sm mb-6">.xlsx, .csv 지원 (최대 10MB)</p>
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">파일을 드래그하거나 클릭하세요</h3>
+            <p className="text-slate-500 text-sm mb-8">.xlsx, .csv 파일만 지원합니다 (최대 10MB)</p>
             <input
               type="file"
               id="file-upload"
@@ -663,73 +1127,61 @@ export default function App() {
               accept=".xlsx, .csv"
               onChange={handleFileUpload}
             />
-            <Button onClick={() => document.getElementById('file-upload')?.click()}>
+            <Button size="lg" className="w-full max-w-xs" onClick={() => document.getElementById('file-upload')?.click()}>
               파일 선택하기
             </Button>
             <button
               onClick={downloadTemplate}
-              className="mt-6 text-xs text-indigo-600 font-medium hover:underline flex items-center gap-1"
+              className="mt-6 text-sm text-indigo-600 font-medium hover:underline flex items-center gap-1.5"
             >
-              <Upload className="w-3 h-3" /> 템플릿 다운로드 (.csv)
+              <Upload className="w-4 h-4" /> 템플릿 다운로드 (.csv)
             </button>
           </div>
         </CardUI>
       ) : (
-        <CardUI className="p-6">
-          <div className="space-y-4">
+        <CardUI className="p-8">
+          <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-slate-900">단어 직접 입력</h3>
+              <div>
+                <h3 className="font-bold text-lg text-slate-900">단어 직접 입력</h3>
+                <p className="text-slate-500 text-sm">표에서 복사한 데이터를 아래에 붙여넣으세요.</p>
+              </div>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() =>
+                onClick={() => {
                   setUploadData([
                     ...uploadData,
                     { term: '', meaning: '', example: '', category: '', difficulty: 'medium', source: '' }
-                  ])
-                }
+                  ]);
+                }}
               >
-                <Plus className="w-4 h-4 mr-1" /> 행 추가
+                <Plus className="w-4 h-4 mr-1.5" /> 행 추가
               </Button>
             </div>
 
-            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50">
+                <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th className="px-3 py-2 text-left font-medium text-slate-500">단어</th>
-                    <th className="px-3 py-2 text-left font-medium text-slate-500">뜻</th>
-                    <th className="px-3 py-2 text-left font-medium text-slate-500">예문</th>
-                    <th className="px-3 py-2 text-left font-medium text-slate-500">카테고리</th>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-700">단어</th>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-700">뜻</th>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-700">예문</th>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-700">카테고리</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {(uploadData.length === 0
-                    ? [{ term: '', meaning: '', example: '', category: '', difficulty: 'medium', source: '' }]
-                    : uploadData
-                  ).map((row, i) => (
-                    <tr key={i}>
+                  {uploadData.map((row, i) => (
+                    <tr key={i} className="hover:bg-slate-50/50">
                       {['term', 'meaning', 'example', 'category'].map((field) => (
-                        <td key={field} className="p-1">
+                        <td key={field} className="p-2">
                           <input
                             type="text"
-                            className="w-full px-2 py-1.5 border border-slate-200 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                            placeholder={field === 'term' ? '단어' : field === 'meaning' ? '뜻' : field === 'example' ? '예문' : '카테고리'}
                             value={(row as any)[field]}
                             onChange={(e) => {
-                              let newData = [...uploadData];
-                              if (newData.length === 0) {
-                                newData = [{ term: '', meaning: '', example: '', category: '', difficulty: 'medium', source: '' }];
-                              }
-                              if (!newData[i]) {
-                                newData[i] = {
-                                  term: '',
-                                  meaning: '',
-                                  example: '',
-                                  category: '',
-                                  difficulty: 'medium',
-                                  source: ''
-                                };
-                              }
+                              const newData = [...uploadData];
                               (newData[i] as any)[field] = e.target.value;
                               setUploadData(newData);
                             }}
@@ -770,11 +1222,12 @@ export default function App() {
               </table>
             </div>
 
-            <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 flex gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-              <p className="text-xs text-amber-700">
-                엑셀에서 범위를 복사한 뒤 한 줄씩 붙여넣어 단어장을 만들 수 있습니다.
-              </p>
+            <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex gap-3 items-start">
+              <AlertCircle className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+              <div className="text-sm text-indigo-800">
+                <p className="font-semibold mb-1">팁: 엑셀에서 데이터를 복사하세요</p>
+                <p>단어, 뜻, 예문, 카테고리 순서로 된 데이터를 복사하여 붙여넣으면 자동으로 채워집니다.</p>
+              </div>
             </div>
           </div>
         </CardUI>
@@ -794,7 +1247,7 @@ export default function App() {
       return (
         <div className="max-w-xl mx-auto py-10 text-center">
           <h2 className="text-2xl font-bold">학습할 카드가 없습니다.</h2>
-          <Button className="mt-4" onClick={() => setView('dashboard')}>대시보드로</Button>
+          <Button className="mt-4" onClick={() => setView('home')}>대시보드로</Button>
         </div>
       );
     }
@@ -802,27 +1255,48 @@ export default function App() {
     const card = studyCards[currentCardIndex];
     if (!card) return null;
 
+    if (isFiltering) {
+      return (
+        <div className="max-w-xl mx-auto py-10 space-y-8">
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" size="sm" onClick={() => setIsFiltering(false)}>
+              <ArrowLeft className="w-4 h-4 mr-2" /> 요약으로 돌아가기
+            </Button>
+          </div>
+          <h2 className="text-2xl font-bold text-center">선택된 단어들</h2>
+          <div className="space-y-4">
+            {filteredCards.map((c) => (
+              <div key={c.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                <div className="font-bold text-lg text-slate-900">{c.term}</div>
+                <div className="text-slate-600">{c.meaning}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="max-w-xl mx-auto py-10 space-y-8">
         {showSummary ? (
           <div className="text-center space-y-6">
             <h2 className="text-3xl font-bold">학습 완료!</h2>
             <div className="grid grid-cols-3 gap-4">
-              <div className="bg-rose-50 p-4 rounded-xl text-rose-600 cursor-pointer hover:bg-rose-100 transition-colors" onClick={() => restartStudy(false, 'hard')}>
+              <div className="bg-rose-50 p-4 rounded-xl text-rose-600 cursor-pointer hover:bg-rose-100 transition-colors" onClick={() => showFilteredCards('hard')}>
                 <div className="text-2xl font-bold">{feedbackStats.hard}</div>
                 <div className="text-xs">모르겠음</div>
               </div>
-              <div className="bg-amber-50 p-4 rounded-xl text-amber-600 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => restartStudy(false, 'medium')}>
+              <div className="bg-amber-50 p-4 rounded-xl text-amber-600 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => showFilteredCards('medium')}>
                 <div className="text-2xl font-bold">{feedbackStats.medium}</div>
                 <div className="text-xs">헷갈림</div>
               </div>
-              <div className="bg-emerald-50 p-4 rounded-xl text-emerald-600 cursor-pointer hover:bg-emerald-100 transition-colors" onClick={() => restartStudy(false, 'easy')}>
+              <div className="bg-emerald-50 p-4 rounded-xl text-emerald-600 cursor-pointer hover:bg-emerald-100 transition-colors" onClick={() => showFilteredCards('easy')}>
                 <div className="text-2xl font-bold">{feedbackStats.easy}</div>
                 <div className="text-xs">알겠음</div>
               </div>
             </div>
             <div className="flex gap-4">
-              <Button variant="outline" className="flex-1" onClick={() => setView('dashboard')}>대시보드로</Button>
+              <Button variant="outline" className="flex-1" onClick={() => { setView('home'); }}>대시보드로</Button>
               {(feedbackStats.hard > 0 || feedbackStats.medium > 0) && (
                 <Button className="flex-1" onClick={() => restartStudy(false)}>다시 학습하기</Button>
               )}
@@ -831,13 +1305,13 @@ export default function App() {
         ) : (
           <>
             <div className="flex items-center justify-between">
-              <Button variant="ghost" size="sm" onClick={() => setView('dashboard')}>
+              <Button variant="ghost" size="sm" onClick={() => setView('home')}>
                 <ArrowLeft className="w-4 h-4 mr-2" /> 학습 종료
               </Button>
               <div className="flex-1 mx-8">
                 <div className="flex justify-between text-xs text-slate-400 mb-1.5 font-medium">
                   <span>{currentCardIndex + 1} / {studyCards.length}</span>
-                  <span>남은 단어: {studyCards.length - currentCardIndex - 1}</span>
+                  <span>남은 단어: {studyCards.length - currentCardIndex}</span>
                 </div>
                 <ProgressBar progress={((currentCardIndex + 1) / studyCards.length) * 100} />
               </div>
@@ -951,9 +1425,8 @@ export default function App() {
 
         <div className="flex-1 px-4 space-y-2">
           {[
-            { id: 'dashboard', icon: BarChart2, label: '대시보드' },
+            { id: 'home', icon: BarChart2, label: '홈' },
             { id: 'decks', icon: BookOpen, label: '단어장' },
-            { id: 'groups', icon: Users, label: '스터디 그룹' },
             { id: 'reports', icon: BarChart2, label: '학습 리포트' },
           ].map((item) => (
             <button
@@ -980,9 +1453,8 @@ export default function App() {
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 flex md:hidden justify-around p-2">
         {[
-          { id: 'dashboard', icon: BarChart2, label: '홈' },
+          { id: 'home', icon: BarChart2, label: '홈' },
           { id: 'decks', icon: BookOpen, label: '단어장' },
-          { id: 'groups', icon: Users, label: '그룹' },
           { id: 'reports', icon: BarChart2, label: '리포트' },
         ].map((item) => (
           <button
@@ -1008,24 +1480,11 @@ export default function App() {
             exit={{ opacity: 0, x: -10 }}
             transition={{ duration: 0.2 }}
           >
-            {view === 'dashboard' && renderDashboard()}
+            {view === 'home' && renderHome()}
             {view === 'decks' && renderDecks()}
             {view === 'upload' && renderUpload()}
             {view === 'study' && renderStudy()}
-            {view === 'groups' && (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <Users className="w-16 h-16 text-slate-200 mb-4" />
-                <h2 className="text-xl font-bold text-slate-900">스터디 그룹 기능 준비 중</h2>
-                <p className="text-slate-500">동료들과 함께 학습하고 경쟁하는 기능을 곧 만나보실 수 있습니다.</p>
-              </div>
-            )}
-            {view === 'reports' && (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <BarChart2 className="w-16 h-16 text-slate-200 mb-4" />
-                <h2 className="text-xl font-bold text-slate-900">학습 리포트 준비 중</h2>
-                <p className="text-slate-500">나의 학습 패턴과 성취도를 분석한 리포트를 곧 제공할 예정입니다.</p>
-              </div>
-            )}
+            {view === 'reports' && renderReports()}
           </motion.div>
         </AnimatePresence>
       </main>
