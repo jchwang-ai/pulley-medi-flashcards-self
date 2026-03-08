@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { GoogleGenAI } from "@google/genai";
+import { cn } from './utils';
+import { AICoachCard, CoachStats } from './components/AICoach';
+import { Button, CardUI } from './components/UI';
 import {
   BookOpen,
   Plus,
@@ -25,12 +27,6 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import * as XLSX from 'xlsx';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
 
 interface Card {
   id?: number;
@@ -61,62 +57,6 @@ interface User {
   name: string;
   email: string;
 }
-
-const Button = ({
-  children,
-  className,
-  variant = 'primary',
-  size = 'md',
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
-  size?: 'sm' | 'md' | 'lg';
-}) => {
-  const variants = {
-    primary: 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm',
-    secondary: 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm',
-    outline: 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-    ghost: 'text-slate-600 hover:bg-slate-100',
-    danger: 'bg-rose-500 text-white hover:bg-rose-600 shadow-sm',
-  };
-
-  const sizes = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2',
-    lg: 'px-6 py-3 text-lg font-medium',
-  };
-
-  return (
-    <button
-      className={cn(
-        'inline-flex items-center justify-center rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none',
-        variants[variant],
-        sizes[size],
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-};
-
-const CardUI = ({
-  children,
-  className,
-  onClick
-}: {
-  children: React.ReactNode;
-  className?: string;
-  onClick?: () => void;
-}) => (
-  <div
-    className={cn('bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col', className)}
-    onClick={onClick}
-  >
-    {children}
-  </div>
-);
 
 const ProgressBar = ({ progress, color = 'bg-indigo-600' }: { progress: number; color?: string }) => (
   <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -939,16 +879,27 @@ const startStudy = async (deckId?: number) => {
   const renderDecks = () => {
     if (decks.length === 0) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-          <BookOpen className="w-16 h-16 text-slate-300" />
-          <h3 className="text-xl font-semibold text-slate-700 mt-6">아직 단어장이 없습니다</h3>
-          <p className="text-sm text-slate-500 mt-2 mb-6">첫 단어장을 만들어 AI 단어 학습을 시작해보세요.</p>
-          <button
+        <div className="relative flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+          {/* Background Glow Effect */}
+          <div className="absolute inset-0 flex items-center justify-center -z-10">
+            <div className="w-96 h-96 bg-indigo-500/10 rounded-full blur-[120px]" />
+          </div>
+          
+          <div className="w-24 h-24 bg-white rounded-full shadow-xl flex items-center justify-center mb-8 relative">
+            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 rounded-full blur-xl" />
+            <BookOpen className="w-10 h-10 text-indigo-600 relative z-10" />
+          </div>
+          
+          <h3 className="text-2xl font-bold text-slate-900 mb-3">아직 단어장이 없습니다</h3>
+          <p className="text-slate-500 mb-10 max-w-sm">첫 단어장을 만들어 AI 단어 학습을 시작해보세요. 당신의 학습 여정이 여기서 시작됩니다.</p>
+          
+          <Button 
+            size="lg" 
+            className="px-8 py-4 text-lg rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:shadow-xl hover:shadow-indigo-500/30 hover:scale-[1.02] transition-all"
             onClick={() => setView('upload')}
-            className="flex items-center gap-2 px-8 py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] transition"
           >
-            <Plus className="w-5 h-5" /> 새 단어장 만들기
-          </button>
+            <Plus className="w-5 h-5 mr-2" /> 새 단어장 만들기
+          </Button>
         </div>
       );
     }
@@ -1095,10 +1046,26 @@ const startStudy = async (deckId?: number) => {
         </header>
 
         {/* SECTION 6: AI Coach (Moved to Top) */}
-        <CardUI className="p-6 bg-indigo-50 border-indigo-100">
-          <h3 className="font-bold text-lg text-indigo-900 mb-2">AI 학습 코치</h3>
-          <p className="text-indigo-700">"좋은 학습 페이스입니다!<br/>헷갈리는 단어를 조금만 더 복습하면<br/>이번 주 안에 단어장 하나를 완전히 마스터할 수 있어요."</p>
-        </CardUI>
+        <AICoachCard 
+          stats={{
+            totalWords: stats.total,
+            easy: stats.easy,
+            medium: stats.medium,
+            hard: stats.hard,
+            todayProgress: completedToday,
+            dailyGoal: dailyGoal,
+            streak: streak,
+            completedDecks: decks.filter(d => getDeckProgress(d.id, d.cardCount).easy === d.cardCount && d.cardCount > 0).length,
+            notStartedDecks: decks.filter(d => d.cardCount > 0 && getDeckProgress(d.id, d.cardCount).easy === 0 && getDeckProgress(d.id, d.cardCount).medium === 0 && getDeckProgress(d.id, d.cardCount).hard === d.cardCount).length,
+            reviewNeeded: reviewNeeded,
+            userName: currentUser?.name || '학생'
+          }}
+          onAction={(action) => {
+            if (action === 'upload') setView('upload');
+            if (action === 'study') setView('study');
+            if (action === 'decks') setView('decks');
+          }}
+        />
 
         {/* SECTION 1: Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
