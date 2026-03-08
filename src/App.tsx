@@ -104,7 +104,7 @@ const CardUI = ({
   onClick?: () => void;
 }) => (
   <div
-    className={cn('bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden h-[320px] flex flex-col', className)}
+    className={cn('bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden', className)}
     onClick={onClick}
   >
     {children}
@@ -320,8 +320,8 @@ export default function App() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: uploadMeta.title,
-        words: uploadData,
+        title: uploadMeta.title,
+        cards: uploadData,
         category: uploadMeta.category
       }),
     });
@@ -395,7 +395,7 @@ export default function App() {
           </div>
         </CardUI>
 
-        <CardUI className="p-6">
+        <CardUI className="p-6 h-fit">
           <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
             <AlertCircle className="w-5 h-5 text-rose-500" />
             취약 단어 Top 5
@@ -425,8 +425,7 @@ export default function App() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {(decks || []).map((deck) => (
           <div key={deck.id}>
-            <CardUI className="group hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer" onClick={() => startStudy(deck.id)}>
-              <div className="p-5 flex flex-col h-full">
+<CardUI className="group hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer h-[320px] flex flex-col" onClick={() => startStudy(deck.id)}>              <div className="p-5 flex flex-col h-full">
                 <div className="flex justify-between items-start mb-4">
                   <div className="bg-indigo-50 text-indigo-600 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">
                     {deck.category}
@@ -584,9 +583,14 @@ export default function App() {
   };
 
   const renderUpload = () => (
-    <div className="max-w-2xl mx-auto space-y-8 py-8">
+    <div className="max-w-2xl mx-auto space-y-4 py-2">
+      <div className="text-center">
+        <h2 className="text-xl font-bold text-slate-900">단어장 추가</h2>
+        <p className="text-slate-500 text-xs">새로운 단어장을 만들고 내용을 입력하세요.</p>
+      </div>
+
       <CardUI className="p-6">
-        <h3 className="font-bold text-slate-900 mb-4">단어장 정보 설정</h3>
+        <h3 className="font-bold text-slate-900 mb-4 text-base">단어장 정보 설정</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-slate-700">제목</label>
@@ -594,30 +598,35 @@ export default function App() {
               type="text"
               value={uploadMeta.title}
               onChange={(e) => setUploadMeta((prev) => ({ ...prev, title: e.target.value }))}
-              className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+              placeholder="단어장 제목"
+              className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-base"
             />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-slate-700">카테고리</label>
-            <select
+            <input
+              type="text"
               value={uploadMeta.category}
               onChange={(e) => setUploadMeta((prev) => ({ ...prev, category: e.target.value }))}
-              className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
-            >
-              <option>General</option>
-              <option>Anatomy</option>
-              <option>Medication</option>
-              <option>Vital Signs</option>
-              <option>Nursing Intervention</option>
-            </select>
+              placeholder="카테고리 입력/선택"
+              list="categories"
+              className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-base"
+            />
+            <datalist id="categories">
+              <option value="General" />
+              <option value="Anatomy" />
+              <option value="Medication" />
+              <option value="Vital Signs" />
+              <option value="Nursing Intervention" />
+            </datalist>
           </div>
         </div>
       </CardUI>
 
-      <div className="text-center">
-        <h2 className="text-3xl font-bold text-slate-900 mb-2">단어장 추가</h2>
-        <p className="text-slate-500">엑셀 파일을 업로드하거나 직접 복사해서 붙여넣으세요.</p>
-        <div className="flex items-center justify-center gap-4 mt-6">
+      <div className="text-center pt-4">
+        <h3 className="font-bold text-slate-900 mb-2 text-lg">단어장 내용 넣기</h3>
+        <p className="text-slate-500 text-sm">엑셀 파일을 업로드하거나 직접 복사해서 붙여넣으세요.</p>
+        <div className="flex items-center justify-center gap-4 mt-4">
           <button
             onClick={() => setUploadMode('paste')}
             className={cn(
@@ -707,7 +716,10 @@ export default function App() {
                             className="w-full px-2 py-1.5 border border-slate-200 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
                             value={(row as any)[field]}
                             onChange={(e) => {
-                              const newData = [...uploadData];
+                              let newData = [...uploadData];
+                              if (newData.length === 0) {
+                                newData = [{ term: '', meaning: '', example: '', category: '', difficulty: 'medium', source: '' }];
+                              }
                               if (!newData[i]) {
                                 newData[i] = {
                                   term: '',
