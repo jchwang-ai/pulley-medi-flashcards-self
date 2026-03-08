@@ -159,37 +159,39 @@ export default function App() {
   };
 
   const fetchDecks = async () => {
-    try {
-      const res = await fetch('/api/decks');
-      if (!res.ok) {
-        setDecks([]);
-        return;
-      }
-
-      const data = await res.json();
-
-      const mappedDecks: Deck[] = (Array.isArray(data) ? data : []).map((deck: any) => {
-        const words = Array.isArray(deck.words) ? deck.words : [];
-
-        return {
-          id: Number(deck.id),
-          title: deck.title || '새 단어장',
-          description: deck.description || `${deck.cardCount}개의 단어가 포함된 단어장`,
-          category: deck.category || 'General',
-          cardCount: deck.cardCount || 0,
-          easyCount: deck.easyCount || 0,
-          mediumCount: deck.mediumCount || 0,
-          hardCount: deck.hardCount || 0,
-          previewCards: deck.previewCards || [],
-        };
-      });
-
-      setDecks(mappedDecks);
-    } catch (error) {
-      console.error('fetchDecks error:', error);
+  try {
+    const res = await fetch('/api/decks');
+    if (!res.ok) {
       setDecks([]);
+      return;
     }
-  };
+
+    const data = await res.json();
+
+    const mappedDecks: Deck[] = (Array.isArray(data) ? data : []).map((deck: any) => {
+      const words = Array.isArray(deck.words) ? deck.words : [];
+
+      return {
+        id: Number(deck.id),
+        title: deck.name || '새 단어장',
+        description: `${words.length}개의 단어가 포함된 단어장`,
+        category: deck.category || 'General',
+        cardCount: words.length,
+        easyCount: 0,
+        mediumCount: 0,
+        hardCount: 0,
+        previewCards: words.slice(0, 3).map((word: any) => ({
+          term: word?.term || '',
+        })),
+      };
+    });
+
+    setDecks(mappedDecks);
+  } catch (error) {
+    console.error('fetchDecks error:', error);
+    setDecks([]);
+  }
+};
 
   const startStudy = async (deckId?: number) => {
     try {
@@ -307,40 +309,39 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
-  const saveDeck = async () => {
-    if (!uploadMeta.title) {
-      alert('단어장 제목을 입력해주세요.');
+ const saveDeck = async () => {
+  if (!uploadMeta.title) {
+    alert('단어장 제목을 입력해주세요.');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/decks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: uploadMeta.title,
+        words: uploadData,
+        category: uploadMeta.category
+      }),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('saveDeck error:', errorText);
+      alert('단어장 저장 중 오류가 발생했습니다.');
       return;
     }
 
-    try {
-      const res = await fetch('/api/decks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: uploadMeta.title,
-          description: '', // Add description if needed or handle it
-          category: uploadMeta.category,
-          cards: uploadData
-        }),
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error('saveDeck error:', errorText);
-        alert('단어장 저장 중 오류가 발생했습니다.');
-        return;
-      }
-
-      await fetchDecks();
-      setView('decks');
-      setUploadData([]);
-      setUploadMeta({ title: '', category: 'General' });
-    } catch (error) {
-      console.error('saveDeck error:', error);
-      alert('단어장 저장 중 오류가 발생했습니다.');
-    }
-  };
+    await fetchDecks();
+    setView('decks');
+    setUploadData([]);
+    setUploadMeta({ title: '', category: 'General' });
+  } catch (error) {
+    console.error('saveDeck error:', error);
+    alert('단어장 저장 중 오류가 발생했습니다.');
+  }
+};
 
   const speak = (text: string) => {
     const utterance = new SpeechSynthesisUtterance(text);
