@@ -1,5 +1,5 @@
 import postgres from 'postgres';
-import { initDatabase } from '../db-init';
+import { initDatabase } from '../db-init.ts';
 
 const sql = postgres(process.env.DATABASE_URL!, {
   ssl: 'require',

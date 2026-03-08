@@ -1,6 +1,6 @@
 import postgres from 'postgres';
 import bcrypt from 'bcryptjs';
-import { initDatabase } from '../db-init';
+import { initDatabase } from '../db-init.ts';
 
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is missing');
