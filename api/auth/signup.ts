@@ -1,5 +1,6 @@
 import postgres from 'postgres';
 import bcrypt from 'bcryptjs';
+import { initDatabase } from '../db-init';
 
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is missing');
@@ -9,31 +10,13 @@ const sql = postgres(process.env.DATABASE_URL, {
   ssl: 'require',
 });
 
-let initialized = false;
-
-async function initUsersTable() {
-  if (initialized) return;
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `;
-
-  initialized = true;
-}
-
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
 
   try {
-    await initUsersTable();
+    await initDatabase();
 
     const { name, email, password } = req.body || {};
 
