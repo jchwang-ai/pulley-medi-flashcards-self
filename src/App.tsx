@@ -936,133 +936,129 @@ const startStudy = async (deckId?: number) => {
     </div>
   );
 
-  const renderDecks = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-900">내 단어장</h2>
-        <Button onClick={() => setView('upload')} className="gap-2">
-          <Plus className="w-4 h-4" /> 새 단어장 만들기
-        </Button>
-      </div>
-
-      <div className="flex gap-2">
-        {(['all', 'active', 'completed', 'notStarted'] as const).map((filter) => (
+  const renderDecks = () => {
+    if (decks.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+          <BookOpen className="w-16 h-16 text-slate-300" />
+          <h3 className="text-xl font-semibold text-slate-700 mt-6">아직 단어장이 없습니다</h3>
+          <p className="text-sm text-slate-500 mt-2 mb-6">첫 단어장을 만들어 AI 단어 학습을 시작해보세요.</p>
           <button
-            key={filter}
-            onClick={() => setDeckFilter(filter)}
-            className={cn(
-              "px-4 py-1.5 text-sm font-medium rounded-full transition-all",
-              deckFilter === filter
-                ? "bg-indigo-100 text-indigo-700"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            )}
+            onClick={() => setView('upload')}
+            className="flex items-center gap-2 px-8 py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] transition"
           >
-            {filter === 'all' ? '전체' : filter === 'active' ? '학습중' : filter === 'completed' ? '완료' : '시작 전'}
+            <Plus className="w-5 h-5" /> 새 단어장 만들기
           </button>
-        ))}
-      </div>
+        </div>
+      );
+    }
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {(decks || []).filter(deck => {
-          const progress = getDeckProgress(deck.id, deck.cardCount);
-          if (deckFilter === 'active') return progress.easy < deck.cardCount && deck.cardCount > 0;
-          if (deckFilter === 'completed') return progress.easy === deck.cardCount && deck.cardCount > 0;
-          if (deckFilter === 'notStarted') return deck.cardCount > 0 && progress.easy === 0 && progress.medium === 0 && progress.hard === deck.cardCount;
-          return true;
-        }).map((deck) => {
-          const progress = getDeckProgress(deck.id, deck.cardCount);
-          const isCompleted = progress.easy === deck.cardCount && deck.cardCount > 0;
-          return (
-            <div key={deck.id} className="relative">
-              {isCompleted && (
-                <div className="absolute -top-3 -right-3 z-10 rotate-12">
-                  <div className="bg-emerald-500 text-white font-black text-xs px-3 py-1 rounded shadow-lg border-2 border-white">
-                    PASS
-                  </div>
-                </div>
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-slate-900">내 단어장</h2>
+          <Button onClick={() => setView('upload')} className="gap-2">
+            <Plus className="w-4 h-4" /> 새 단어장 만들기
+          </Button>
+        </div>
+
+        <div className="flex gap-2">
+          {(['all', 'active', 'completed', 'notStarted'] as const).map((filter) => (
+            <button
+              key={filter}
+              onClick={() => setDeckFilter(filter)}
+              className={cn(
+                "px-4 py-1.5 text-sm font-medium rounded-full transition-all",
+                deckFilter === filter
+                  ? "bg-indigo-100 text-indigo-700"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               )}
-              <CardUI 
-                className={cn(
-                  "group hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer",
-                  isCompleted && "border-emerald-200 bg-emerald-50/30"
-                )} 
-                onClick={() => startStudy(deck.id)}
-              >
-                <div className="p-5 flex flex-col h-full">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="bg-indigo-50 text-indigo-600 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">
-                      {deck.category}
-                    </div>
-                    <button onClick={(e) => { e.stopPropagation(); setActiveMenuDeck(deck); }} className="p-1 hover:bg-slate-100 rounded">
-                      <MoreVertical className="w-4 h-4 text-slate-400" />
-                    </button>
-                  </div>
-
-                  <h3 className="text-lg font-bold text-slate-900 mb-1">{deck.title}</h3>
-                  <p className="text-sm text-slate-500 mb-4 line-clamp-2">{deck.description}</p>
-
-                  <div className="mb-4 text-xs text-slate-500 bg-slate-50 p-2 rounded-lg">
-                    <span className="font-semibold text-slate-700">단어:</span> {(deck.previewCards || []).slice(0, 3).map((c) => c.term).join(', ')}
-                    {deck.cardCount > 3 && '...'}
-                  </div>
-
-                  <div className="space-y-2 mb-4">
-                    <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      <span>모르겠음 {progress.hard}</span>
-                      <span>헷갈림 {progress.medium}</span>
-                      <span>알겠음 {progress.easy}</span>
-                    </div>
-                    <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-100">
-                      <motion.div 
-                        className="bg-rose-500" 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${deck.cardCount > 0 ? (progress.hard / deck.cardCount) * 100 : 0}%` }}
-                        transition={{ duration: 0.5, ease: "easeOut" }}
-                      />
-                      <motion.div 
-                        className="bg-amber-500" 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${deck.cardCount > 0 ? (progress.medium / deck.cardCount) * 100 : 0}%` }}
-                        transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }}
-                      />
-                      <motion.div 
-                        className="bg-emerald-500" 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${deck.cardCount > 0 ? (progress.easy / deck.cardCount) * 100 : 0}%` }}
-                        transition={{ duration: 0.5, ease: "easeOut", delay: 0.2 }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-slate-100 mt-auto">
-                    <Button className={cn("w-full shadow-lg", isCompleted ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200" : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200")} onClick={() => startStudy(deck.id)}>
-                      {isCompleted ? '다시 학습하기' : '학습하기'} <ChevronRight className="w-4 h-4 ml-1" />
-                    </Button>
-                  </div>
-                </div>
-              </CardUI>
-            </div>
-          );
-        })}
-      </div>
-
-      <AnimatePresence>
-        {activeMenuDeck && (
-          <div className="fixed inset-0 bg-black/20 z-[60] flex items-center justify-center p-4" onClick={() => setActiveMenuDeck(null)}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl"
-              onClick={(e) => e.stopPropagation()}
             >
-              <DeckDetailsContent deck={activeMenuDeck} onClose={() => setActiveMenuDeck(null)} onUpdate={fetchDecks} />
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
+              {filter === 'all' ? '전체' : filter === 'active' ? '학습중' : filter === 'completed' ? '완료' : '시작 전'}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {(decks || []).filter(deck => {
+            const progress = getDeckProgress(deck.id, deck.cardCount);
+            if (deckFilter === 'active') return progress.easy < deck.cardCount && deck.cardCount > 0;
+            if (deckFilter === 'completed') return progress.easy === deck.cardCount && deck.cardCount > 0;
+            if (deckFilter === 'notStarted') return deck.cardCount > 0 && progress.easy === 0 && progress.medium === 0 && progress.hard === deck.cardCount;
+            return true;
+          }).map((deck) => {
+            const progress = getDeckProgress(deck.id, deck.cardCount);
+            const isCompleted = progress.easy === deck.cardCount && deck.cardCount > 0;
+            return (
+              <div key={deck.id} className="relative">
+                {isCompleted && (
+                  <div className="absolute -top-3 -right-3 z-10 rotate-12">
+                    <div className="bg-emerald-500 text-white font-black text-xs px-3 py-1 rounded shadow-lg border-2 border-white">
+                      PASS
+                    </div>
+                  </div>
+                )}
+                <CardUI 
+                  className={cn(
+                    "group hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer",
+                    isCompleted && "border-emerald-200 bg-emerald-50/30"
+                  )} 
+                  onClick={() => startStudy(deck.id)}
+                >
+                  <div className="p-5 flex flex-col h-full">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="bg-indigo-50 text-indigo-600 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">
+                        {deck.category}
+                      </div>
+                      <button onClick={(e) => { e.stopPropagation(); setActiveMenuDeck(deck); }} className="p-1 hover:bg-slate-100 rounded">
+                        <MoreVertical className="w-4 h-4 text-slate-400" />
+                      </button>
+                    </div>
+
+                    <h3 className="text-lg font-bold text-slate-900 mb-1">{deck.title}</h3>
+                    <p className="text-sm text-slate-500 mb-4 line-clamp-2">{deck.description}</p>
+
+                    <div className="mb-4 text-xs text-slate-500 bg-slate-50 p-2 rounded-lg">
+                      <span className="font-semibold text-slate-700">단어:</span> {(deck.previewCards || []).slice(0, 3).map((c) => c.term).join(', ')}
+                      {deck.cardCount > 3 && '...'}
+                    </div>
+
+                    <div className="space-y-2 mb-4">
+                      <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <span>모르겠음 {progress.hard}</span>
+                        <span>헷갈림 {progress.medium}</span>
+                        <span>알겠음 {progress.easy}</span>
+                      </div>
+                      <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-100">
+                        <motion.div 
+                          className="bg-rose-500" 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${deck.cardCount > 0 ? (progress.hard / deck.cardCount) * 100 : 0}%` }}
+                          transition={{ duration: 0.5, ease: "easeOut" }}
+                        />
+                        <motion.div 
+                          className="bg-amber-500" 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${deck.cardCount > 0 ? (progress.medium / deck.cardCount) * 100 : 0}%` }}
+                          transition={{ duration: 0.5, ease: "easeOut" }}
+                        />
+                        <motion.div 
+                          className="bg-emerald-500" 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${deck.cardCount > 0 ? (progress.easy / deck.cardCount) * 100 : 0}%` }}
+                          transition={{ duration: 0.5, ease: "easeOut" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </CardUI>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   const renderReports = () => {
     const allWords = decks.flatMap(d => d.words || []);
