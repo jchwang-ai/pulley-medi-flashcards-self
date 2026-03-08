@@ -518,7 +518,7 @@ const saveDeck = async () => {
       body: JSON.stringify({
         name: uploadMeta.title,
         category: uploadMeta.category,
-        words: validWords,
+        words: validWords
       }),
     });
 
@@ -531,10 +531,13 @@ const saveDeck = async () => {
 
     await fetchDecks();
     setView('decks');
+
     setUploadData([
       { term: '', meaning: '', example: '', category: '', difficulty: 'medium', source: '' }
     ]);
+
     setUploadMeta({ title: '', category: 'General' });
+
   } catch (error) {
     console.error('saveDeck error:', error);
     alert('단어장 저장 중 오류가 발생했습니다.');
