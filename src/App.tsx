@@ -224,6 +224,7 @@ export default function App() {
     const saved = localStorage.getItem('dailyGoal');
     return saved ? Number(saved) : 10;
   });
+  const [completedToday, setCompletedToday] = useState(0);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [tempGoal, setTempGoal] = useState(dailyGoal);
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -232,6 +233,28 @@ export default function App() {
     const today = new Date();
     return today.toISOString().split('T')[0];
   };
+
+  const getDailyProgressKey = (userId: string) => {
+    return `dailyProgress_${userId}_${getTodayString()}`;
+  };
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setCompletedToday(0);
+      return;
+    }
+
+    const key = getDailyProgressKey(String(currentUser.id));
+    const saved = localStorage.getItem(key);
+    setCompletedToday(saved ? Number(saved) : 0);
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const key = getDailyProgressKey(String(currentUser.id));
+    localStorage.setItem(key, String(completedToday));
+  }, [currentUser, completedToday]);
 
   const [studyDates, setStudyDates] = useState<string[]>(() => {
     const saved = localStorage.getItem('studyDates');
@@ -528,6 +551,7 @@ const startStudy = async (deckId?: number) => {
       setIsFlipped(false);
     } else {
       markStudyCompleteToday();
+      setCompletedToday(prev => prev + studyCards.length);
       setShowSummary(true);
     }
   };
@@ -761,9 +785,9 @@ const startStudy = async (deckId?: number) => {
               <div className="text-2xl font-bold text-slate-900 mb-4">{dailyGoal} 단어</div>
               <div className="text-sm text-slate-500 mb-1">진행률</div>
               <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-600 transition-all duration-500" style={{ width: `${dailyGoal > 0 ? Math.min(100, (8 / dailyGoal) * 100) : 0}%` }} />
+                <div className="h-full bg-indigo-600 transition-all duration-500" style={{ width: `${dailyGoal > 0 ? Math.min(100, (completedToday / dailyGoal) * 100) : 0}%` }} />
               </div>
-              <div className="text-sm font-bold text-slate-900 mt-1">8 / {dailyGoal || 0} 완료</div>
+              <div className="text-sm font-bold text-slate-900 mt-1">{completedToday} / {dailyGoal || 0} 완료</div>
             </div>
           </div>
           <Button className="w-full mt-6" size="lg" onClick={() => setView('decks')}>학습 시작하기</Button>
