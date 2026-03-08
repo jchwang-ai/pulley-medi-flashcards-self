@@ -1,72 +1,54 @@
-import Database from "better-sqlite3";
+import postgres from "postgres";
 
-const db = new Database("/tmp/decks.db");
+const sql = postgres(process.env.DATABASE_URL!, {
+  ssl: "require",
+});
 
-db.prepare(`
+// Initialize table
+sql`
   CREATE TABLE IF NOT EXISTS decks (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    words TEXT NOT NULL,
-    createdAt TEXT NOT NULL
+    category TEXT NOT NULL DEFAULT 'General',
+    words JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )
-`).run();
+`.catch(console.error);
 
 export default async function handler(req: any, res: any) {
   try {
     if (req.method === "GET") {
-      const rows = db.prepare(`
-        SELECT id, name, words, createdAt
+      const decks = await sql`
+        SELECT id, name, category, words, created_at as "createdAt"
         FROM decks
-        ORDER BY createdAt DESC
-      `).all();
-
-      const decks = rows.map((row: any) => ({
-        ...row,
-        words: JSON.parse(row.words),
-      }));
-
+        ORDER BY created_at DESC
+      `;
       return res.status(200).json(decks);
     }
 
     if (req.method === "POST") {
-      const body = req.body || {};
+      const { name, category, words } = req.body;
+      const id = Date.now().toString();
+      
+      await sql`
+        INSERT INTO decks (id, name, category, words)
+        VALUES (${id}, ${name || "새 단어장"}, ${category || "General"}, ${JSON.stringify(words || [])})
+      `;
 
-      const newDeck = {
-        id: Date.now().toString(),
-        name: body.name || "새 단어장",
-        words: Array.isArray(body.words) ? body.words : [],
-        createdAt: new Date().toISOString(),
-      };
-
-      db.prepare(`
-        INSERT INTO decks (id, name, words, createdAt)
-        VALUES (?, ?, ?, ?)
-      `).run(
-        newDeck.id,
-        newDeck.name,
-        JSON.stringify(newDeck.words),
-        newDeck.createdAt
-      );
-
-      const rows = db.prepare(`
-        SELECT id, name, words, createdAt
+      const decks = await sql`
+        SELECT id, name, category, words, created_at as "createdAt"
         FROM decks
-        ORDER BY createdAt DESC
-      `).all();
-
-      const decks = rows.map((row: any) => ({
-        ...row,
-        words: JSON.parse(row.words),
-      }));
-
+        ORDER BY created_at DESC
+      `;
       return res.status(200).json(decks);
     }
 
     if (req.method === "DELETE") {
-      const { id } = req.query || {};
-
-      db.prepare(`DELETE FROM decks WHERE id = ?`).run(id);
-
+      const { id } = req.query;
+      if (!id) {
+        return res.status(400).json({ error: "ID is required" });
+      }
+      await sql`DELETE FROM decks WHERE id = ${id}`;
       return res.status(200).json({ success: true });
     }
 
