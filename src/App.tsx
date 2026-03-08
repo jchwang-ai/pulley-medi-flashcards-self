@@ -170,6 +170,18 @@ export default function App() {
             localStorage.setItem('token', data.token);
             setIsAuthenticated(true);
             setCurrentUser(data.user);
+            
+            // Cleanup leftover study state
+            localStorage.removeItem("reviewBuckets");
+            localStorage.removeItem("studyDates");
+            localStorage.removeItem("sessionFeedback");
+            localStorage.removeItem("studyCards");
+            setReviewBuckets({
+              hard: [],
+              medium: [],
+              easy: []
+            });
+            
             setView('home');
           } else {
             setAuthError('로그인 응답이 올바르지 않습니다.');
@@ -967,16 +979,30 @@ const startStudy = async (deckId?: number) => {
   );
 
   const renderReports = () => {
-    const totalWords = decks.reduce((acc, deck) => acc + deck.cardCount, 0);
-    const easyWords = reviewBuckets.easy.length;
-    const hardWords = reviewBuckets.hard.length;
-    const mediumWords = reviewBuckets.medium.length;
-    const reviewNeeded = hardWords + mediumWords;
+    const allWords = decks.flatMap(d => d.words || []);
+
+    const stats = {
+      total: allWords.length,
+      easy: allWords.filter(w => (w as any).status === "easy").length,
+      medium: allWords.filter(w => (w as any).status === "medium").length,
+      hard: allWords.filter(w => (w as any).status === "hard").length
+    };
+
+    if (!decks.length) {
+      stats.total = 0;
+      stats.easy = 0;
+      stats.medium = 0;
+      stats.hard = 0;
+    }
+
+    const totalWords = stats.total;
+    const reviewNeeded = stats.hard + stats.medium;
+    const easyWords = stats.easy;
 
     const data = [
-      { name: '알겠음', value: easyWords, color: '#10b981' },
-      { name: '헷갈림', value: mediumWords, color: '#f59e0b' },
-      { name: '모르겠음', value: hardWords, color: '#f43f5e' },
+      { name: '알겠음', value: stats.easy, color: '#10b981' },
+      { name: '헷갈림', value: stats.medium, color: '#f59e0b' },
+      { name: '모르겠음', value: stats.hard, color: '#f43f5e' },
     ];
 
     return (
