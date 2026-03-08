@@ -155,7 +155,7 @@ async function startServer() {
     const user = db.prepare("SELECT id FROM users LIMIT 1").get() as { id: number };
     
     const deckResult = db.prepare("INSERT INTO decks (user_id, title, description, category) VALUES (?, ?, ?, ?)").run(
-      user.id, title, description, category
+      user.id, title, description || `${cards.length}개의 단어가 포함된 단어장`, category
     );
     const deckId = deckResult.lastInsertRowid;
     

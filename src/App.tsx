@@ -104,7 +104,7 @@ const CardUI = ({
   onClick?: () => void;
 }) => (
   <div
-    className={cn('bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden', className)}
+    className={cn('bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden h-[320px] flex flex-col', className)}
     onClick={onClick}
   >
     {children}
@@ -173,16 +173,14 @@ export default function App() {
 
         return {
           id: Number(deck.id),
-          title: deck.name || '새 단어장',
-          description: deck.description || `${words.length}개의 단어가 포함된 단어장`,
+          title: deck.title || '새 단어장',
+          description: deck.description || `${deck.cardCount}개의 단어가 포함된 단어장`,
           category: deck.category || 'General',
-          cardCount: words.length,
-          easyCount: 0,
-          mediumCount: 0,
-          hardCount: 0,
-          previewCards: words.slice(0, 3).map((word: any) => ({
-            term: word?.term || '',
-          })),
+          cardCount: deck.cardCount || 0,
+          easyCount: deck.easyCount || 0,
+          mediumCount: deck.mediumCount || 0,
+          hardCount: deck.hardCount || 0,
+          previewCards: deck.previewCards || [],
         };
       });
 
@@ -320,9 +318,10 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: uploadMeta.title,
-          words: uploadData,
-          category: uploadMeta.category
+          title: uploadMeta.title,
+          description: '', // Add description if needed or handle it
+          category: uploadMeta.category,
+          cards: uploadData
         }),
       });
 
@@ -426,7 +425,7 @@ export default function App() {
         {(decks || []).map((deck) => (
           <div key={deck.id}>
             <CardUI className="group hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer" onClick={() => startStudy(deck.id)}>
-              <div className="p-5">
+              <div className="p-5 flex flex-col h-full">
                 <div className="flex justify-between items-start mb-4">
                   <div className="bg-indigo-50 text-indigo-600 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">
                     {deck.category}
@@ -457,7 +456,7 @@ export default function App() {
                   <ProgressBar progress={deck.cardCount > 0 ? (deck.easyCount / deck.cardCount) * 100 : 0} color="bg-emerald-500" />
                 </div>
 
-                <div className="pt-4 border-t border-slate-50">
+                <div className="pt-4 border-t border-slate-50 mt-auto">
                   <Button className="w-full" onClick={() => startStudy(deck.id)}>
                     학습하기 <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
@@ -551,7 +550,7 @@ export default function App() {
             <div className="flex gap-2 shrink-0">
               <Button variant="outline" className="flex-1" onClick={() => setIsEditing(true)}>수정</Button>
               <Button variant="danger" className="flex-1" onClick={async () => {
-                await fetch(`/api/decks?id=${deck.id}`, { method: 'DELETE' });
+                await fetch(`/api/decks/${deck.id}`, { method: 'DELETE' });
                 onUpdate();
                 onClose();
               }}>
@@ -585,6 +584,35 @@ export default function App() {
 
   const renderUpload = () => (
     <div className="max-w-2xl mx-auto space-y-8 py-8">
+      <CardUI className="p-6">
+        <h3 className="font-bold text-slate-900 mb-4">단어장 정보 설정</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-700">제목</label>
+            <input
+              type="text"
+              value={uploadMeta.title}
+              onChange={(e) => setUploadMeta((prev) => ({ ...prev, title: e.target.value }))}
+              className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-700">카테고리</label>
+            <select
+              value={uploadMeta.category}
+              onChange={(e) => setUploadMeta((prev) => ({ ...prev, category: e.target.value }))}
+              className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+            >
+              <option>General</option>
+              <option>Anatomy</option>
+              <option>Medication</option>
+              <option>Vital Signs</option>
+              <option>Nursing Intervention</option>
+            </select>
+          </div>
+        </div>
+      </CardUI>
+
       <div className="text-center">
         <h2 className="text-3xl font-bold text-slate-900 mb-2">단어장 추가</h2>
         <p className="text-slate-500">엑셀 파일을 업로드하거나 직접 복사해서 붙여넣으세요.</p>
@@ -692,6 +720,34 @@ export default function App() {
                               (newData[i] as any)[field] = e.target.value;
                               setUploadData(newData);
                             }}
+                            onPaste={(e) => {
+                              e.preventDefault();
+                              const pastedData = e.clipboardData.getData('text');
+                              const rows = pastedData.split('\n').filter(r => r.trim() !== '');
+                              const newData = [...uploadData];
+
+                              rows.forEach((rowStr, rowIndex) => {
+                                const cols = rowStr.split('\t');
+                                const targetIndex = i + rowIndex;
+
+                                if (!newData[targetIndex]) {
+                                  newData[targetIndex] = {
+                                    term: '',
+                                    meaning: '',
+                                    example: '',
+                                    category: '',
+                                    difficulty: 'medium',
+                                    source: ''
+                                  };
+                                }
+
+                                if (cols[0] !== undefined) newData[targetIndex].term = cols[0].trim();
+                                if (cols[1] !== undefined) newData[targetIndex].meaning = cols[1].trim();
+                                if (cols[2] !== undefined) newData[targetIndex].example = cols[2].trim();
+                                if (cols[3] !== undefined) newData[targetIndex].category = cols[3].trim();
+                              });
+                              setUploadData(newData);
+                            }}
                           />
                         </td>
                       ))}
@@ -712,73 +768,10 @@ export default function App() {
       )}
 
       {uploadData.length > 0 && (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          <CardUI className="p-6">
-            <h3 className="font-bold text-slate-900 mb-4">단어장 정보 설정</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">제목</label>
-                <input
-                  type="text"
-                  value={uploadMeta.title}
-                  onChange={(e) => setUploadMeta((prev) => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">카테고리</label>
-                <select
-                  value={uploadMeta.category}
-                  onChange={(e) => setUploadMeta((prev) => ({ ...prev, category: e.target.value }))}
-                  className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
-                >
-                  <option>General</option>
-                  <option>Anatomy</option>
-                  <option>Medication</option>
-                  <option>Vital Signs</option>
-                  <option>Nursing Intervention</option>
-                </select>
-              </div>
-            </div>
-          </CardUI>
-
-          <CardUI className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-slate-900">미리보기 ({uploadData.length}개 단어)</h3>
-              <span className="text-xs text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded">검수 완료</span>
-            </div>
-            <div className="max-h-60 overflow-y-auto border border-slate-100 rounded-xl">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-slate-500 sticky top-0">
-                  <tr>
-                    <th className="px-4 py-2 font-medium">단어</th>
-                    <th className="px-4 py-2 font-medium">뜻</th>
-                    <th className="px-4 py-2 font-medium">예문</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {uploadData.slice(0, 10).map((c, i) => (
-                    <tr key={i}>
-                      <td className="px-4 py-2 font-medium text-slate-800">{c.term}</td>
-                      <td className="px-4 py-2 text-slate-600">{c.meaning}</td>
-                      <td className="px-4 py-2 text-slate-400 italic truncate max-w-[400px]">{c.example}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {uploadData.length > 10 && (
-                <div className="p-3 text-center text-slate-400 bg-slate-50/50 text-xs">
-                  외 {uploadData.length - 10}개의 단어가 더 있습니다.
-                </div>
-              )}
-            </div>
-          </CardUI>
-
-          <div className="flex gap-3">
-            <Button variant="outline" className="flex-1" onClick={() => setUploadData([])}>취소</Button>
-            <Button className="flex-1" onClick={saveDeck}>단어장 생성하기</Button>
-          </div>
-        </motion.div>
+        <div className="flex gap-3">
+          <Button variant="outline" className="flex-1" onClick={() => setUploadData([])}>취소</Button>
+          <Button className="flex-1" onClick={saveDeck}>단어장 생성하기</Button>
+        </div>
       )}
     </div>
   );
