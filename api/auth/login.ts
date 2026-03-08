@@ -1,15 +1,23 @@
 import postgres from 'postgres';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL is missing');
+let sql: any = null;
+if (process.env.DATABASE_URL) {
+  sql = postgres(process.env.DATABASE_URL, {
+    ssl: 'require',
+  });
+} else {
+  console.error('DATABASE_URL is missing');
 }
 
-const sql = postgres(process.env.DATABASE_URL, {
-  ssl: 'require',
-});
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key';
 
 export default async function handler(req: any, res: any) {
+  if (!sql) {
+    console.error("Database connection not initialized");
+    return res.status(500).json({ success: false, message: 'Database configuration error' });
+  }
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
@@ -31,7 +39,10 @@ export default async function handler(req: any, res: any) {
       FROM users
       WHERE email = ${normalizedEmail}
       LIMIT 1
-    `;
+    `.catch(err => {
+      console.error("Database query error:", err);
+      throw new Error("데이터베이스 연결 오류: " + err.message);
+    });
 
     const user = users[0];
 
@@ -51,9 +62,12 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
+
     return res.status(200).json({
       success: true,
       message: "로그인되었습니다.",
+      token,
       user: {
         id: user.id,
         name: user.name,

@@ -138,6 +138,10 @@ export default function App() {
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  useEffect(() => {
+    console.log('token:', token);
+  }, [token]);
+
   const handleAuth = async () => {
     setIsAuthLoading(true);
     setAuthError(null);
@@ -151,9 +155,13 @@ export default function App() {
       const data = await res.json().catch(() => null);
       if (res.ok) {
         if (authMode === 'login') {
-          setToken(data.token);
-          localStorage.setItem('token', data.token);
-          setView('home');
+          if (data && data.token) {
+            setToken(data.token);
+            localStorage.setItem('token', data.token);
+            setView('home');
+          } else {
+            setAuthError('로그인 응답이 올바르지 않습니다.');
+          }
         } else {
           setAuthMode('login');
           alert(data?.message || '회원가입이 완료되었습니다. 로그인해주세요.');
