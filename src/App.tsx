@@ -129,7 +129,54 @@ const ProgressBar = ({ progress, color = 'bg-indigo-600' }: { progress: number; 
 );
 
 export default function App() {
-  const [view, setView] = useState<'home' | 'decks' | 'study' | 'groups' | 'reports' | 'upload'>('home');
+  const [view, setView] = useState<'home' | 'decks' | 'study' | 'groups' | 'reports' | 'upload' | 'auth'>('auth');
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const handleAuth = async () => {
+    setIsAuthLoading(true);
+    setAuthError(null);
+    const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/signup';
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail, password: authPassword, name: authName }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        if (authMode === 'login') {
+          setToken(data.token);
+          localStorage.setItem('token', data.token);
+          setView('home');
+        } else {
+          setAuthMode('login');
+          alert('회원가입이 완료되었습니다. 로그인해주세요.');
+        }
+      } else {
+        setAuthError(data.error || '인증 실패');
+      }
+    } catch (error) {
+      console.error('Auth error:', error);
+      setAuthError('서버 연결 중 오류가 발생했습니다.');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const authFetch = (url: string, options: RequestInit = {}) => {
+    const headers = {
+      ...options.headers,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
+    return fetch(url, { ...options, headers });
+  };
   const [deckFilter, setDeckFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [uploadMode, setUploadMode] = useState<'file' | 'paste'>('paste');
   const [isLoading, setIsLoading] = useState(false);
@@ -285,21 +332,25 @@ export default function App() {
 
   const fetchUser = async () => {
     try {
-      const res = await fetch('/api/user');
+      const res = await authFetch('/api/user');
       if (!res.ok) {
-        setUser({ id: 1, name: '사용자', xp: 0, streak: 0 });
+        setToken(null);
+        localStorage.removeItem('token');
+        setView('auth');
         return;
       }
       const data = await res.json();
       setUser(data);
     } catch {
-      setUser({ id: 1, name: '사용자', xp: 0, streak: 0 });
+      setToken(null);
+      localStorage.removeItem('token');
+      setView('auth');
     }
   };
 
 const fetchDecks = async () => {
   try {
-    const res = await fetch('/api/decks');
+    const res = await authFetch('/api/decks');
     if (!res.ok) {
       setDecks([]);
       return;
@@ -426,10 +477,9 @@ const startStudy = async (deckId?: number) => {
     setSessionFeedback((prev) => new Map(prev).set(card.id || 0, feedback));
 
     try {
-      await fetch('/api/study/feedback', {
+      await authFetch('/api/study/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cardId: card.id, status: feedback }),
+        body: JSON.stringify({ cardId: card.id, feedback: feedback }),
       });
     } catch (error) {
       console.error('Failed to save feedback:', error);
@@ -512,9 +562,8 @@ const saveDeck = async () => {
       (item) => item.term?.trim() && item.meaning?.trim()
     );
 
-    const res = await fetch('/api/decks', {
+    const res = await authFetch('/api/decks', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: uploadMeta.title,
         category: uploadMeta.category,
@@ -715,6 +764,54 @@ const saveDeck = async () => {
 
     return { hard, medium, easy };
   };
+
+  const renderAuth = () => (
+    <div className="flex items-center justify-center min-h-screen bg-slate-50">
+      <CardUI className="w-full max-w-md p-8">
+        <h2 className="text-2xl font-bold text-center mb-6">{authMode === 'login' ? '로그인' : '회원가입'}</h2>
+        {authMode === 'signup' && (
+          <input
+            type="text"
+            placeholder="이름"
+            className="w-full p-3 mb-4 border rounded-xl"
+            value={authName}
+            onChange={(e) => setAuthName(e.target.value)}
+          />
+        )}
+        {authError && (
+          <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100">
+            {authError}
+          </div>
+        )}
+        <input
+          type="email"
+          placeholder="이메일"
+          className="w-full p-3 mb-4 border rounded-xl"
+          value={authEmail}
+          onChange={(e) => setAuthEmail(e.target.value)}
+        />
+        <input
+          type="password"
+          placeholder="비밀번호"
+          className="w-full p-3 mb-6 border rounded-xl"
+          value={authPassword}
+          onChange={(e) => setAuthPassword(e.target.value)}
+        />
+        <Button className="w-full mb-4" onClick={handleAuth} disabled={isAuthLoading}>
+          {isAuthLoading ? '처리중...' : (authMode === 'login' ? '로그인' : '회원가입')}
+        </Button>
+        <button
+          className="w-full text-sm text-slate-500 hover:text-indigo-600"
+          onClick={() => {
+            setAuthMode(authMode === 'login' ? 'signup' : 'login');
+            setAuthError(null);
+          }}
+        >
+          {authMode === 'login' ? '계정이 없으신가요? 회원가입' : '이미 계정이 있으신가요? 로그인'}
+        </button>
+      </CardUI>
+    </div>
+  );
 
   const renderDecks = () => (
     <div className="space-y-6">
@@ -1433,63 +1530,70 @@ const saveDeck = async () => {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20 md:pb-0">
-      <nav className="fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-slate-200 z-50 hidden md:flex flex-col">
-        <div className="p-6 mb-8">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-xl">P</div>
-            <span className="font-black text-xl tracking-tight text-slate-900">PulleyVocab</span>
-          </div>
-        </div>
+      {token && (
+        <>
+          <nav className="fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-slate-200 z-50 hidden md:flex flex-col">
+            <div className="p-6 mb-8">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-xl">P</div>
+                <span className="font-black text-xl tracking-tight text-slate-900">PulleyVocab</span>
+              </div>
+            </div>
 
-        <div className="flex-1 px-4 space-y-2">
-          {[
-            { id: 'home', icon: BarChart2, label: '홈' },
-            { id: 'decks', icon: BookOpen, label: '단어장' },
-            { id: 'reports', icon: BarChart2, label: '학습 리포트' },
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setView(item.id as any)}
-              className={cn(
-                'w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all',
-                view === item.id ? 'bg-indigo-50 text-indigo-600 font-bold' : 'text-slate-500 hover:bg-slate-50'
-              )}
-            >
-              <item.icon className="w-5 h-5" />
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
+            <div className="flex-1 px-4 space-y-2">
+              {[
+                { id: 'home', icon: BarChart2, label: '홈' },
+                { id: 'decks', icon: BookOpen, label: '단어장' },
+                { id: 'reports', icon: BarChart2, label: '학습 리포트' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setView(item.id as any)}
+                  className={cn(
+                    'w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all',
+                    view === item.id ? 'bg-indigo-50 text-indigo-600 font-bold' : 'text-slate-500 hover:bg-slate-50'
+                  )}
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
 
-        <div className="p-4 mt-auto border-t border-slate-100">
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50">
-            <Settings className="w-5 h-5" />
-            <span>설정</span>
-          </button>
-        </div>
-      </nav>
+            <div className="p-4 mt-auto border-t border-slate-100">
+              <button 
+                onClick={() => { localStorage.removeItem('token'); setToken(null); setView('auth'); }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50"
+              >
+                <Settings className="w-5 h-5" />
+                <span>로그아웃</span>
+              </button>
+            </div>
+          </nav>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 flex md:hidden justify-around p-2">
-        {[
-          { id: 'home', icon: BarChart2, label: '홈' },
-          { id: 'decks', icon: BookOpen, label: '단어장' },
-          { id: 'reports', icon: BarChart2, label: '리포트' },
-        ].map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setView(item.id as any)}
-            className={cn(
-              'flex flex-col items-center gap-1 p-2 rounded-xl transition-all',
-              view === item.id ? 'text-indigo-600' : 'text-slate-400'
-            )}
-          >
-            <item.icon className="w-6 h-6" />
-            <span className="text-[10px] font-bold">{item.label}</span>
-          </button>
-        ))}
-      </nav>
+          <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 flex md:hidden justify-around p-2">
+            {[
+              { id: 'home', icon: BarChart2, label: '홈' },
+              { id: 'decks', icon: BookOpen, label: '단어장' },
+              { id: 'reports', icon: BarChart2, label: '리포트' },
+            ].map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setView(item.id as any)}
+                className={cn(
+                  'flex flex-col items-center gap-1 p-2 rounded-xl transition-all',
+                  view === item.id ? 'text-indigo-600' : 'text-slate-400'
+                )}
+              >
+                <item.icon className="w-6 h-6" />
+                <span className="text-[10px] font-bold">{item.label}</span>
+              </button>
+            ))}
+          </nav>
+        </>
+      )}
 
-      <main className="md:ml-64 p-4 md:p-10 max-w-7xl mx-auto">
+      <main className={cn(token ? "md:ml-64 p-4 md:p-10 max-w-7xl mx-auto" : "p-4")}>
         <AnimatePresence mode="wait">
           <motion.div
             key={view}
@@ -1498,6 +1602,7 @@ const saveDeck = async () => {
             exit={{ opacity: 0, x: -10 }}
             transition={{ duration: 0.2 }}
           >
+            {view === 'auth' && renderAuth()}
             {view === 'home' && renderHome()}
             {view === 'decks' && renderDecks()}
             {view === 'upload' && renderUpload()}

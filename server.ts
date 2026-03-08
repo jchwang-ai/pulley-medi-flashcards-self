@@ -1,108 +1,72 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import Database from "better-sqlite3";
+import postgres from "postgres";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from 'url';
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = new Database("vocab.db");
+const sql = postgres(process.env.DATABASE_URL!, {
+  ssl: "require",
+});
 
 import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE,
-    name TEXT,
-    xp INTEGER DEFAULT 0,
-    streak INTEGER DEFAULT 0,
-    last_study_date TEXT
-  );
 
-  CREATE TABLE IF NOT EXISTS decks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    title TEXT,
-    description TEXT,
-    category TEXT,
-    is_public INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
+// Initialize database schema
+async function initDb() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      name TEXT,
+      xp INTEGER DEFAULT 0,
+      streak INTEGER DEFAULT 0,
+      last_study_date TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS cards (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    deck_id INTEGER,
-    term TEXT,
-    meaning TEXT,
-    example TEXT,
-    category TEXT,
-    difficulty TEXT,
-    source TEXT,
-    FOREIGN KEY(deck_id) REFERENCES decks(id) ON DELETE CASCADE
-  );
+    CREATE TABLE IF NOT EXISTS decks (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT,
+      description TEXT,
+      category TEXT,
+      is_public INTEGER DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS study_sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    card_id INTEGER,
-    status TEXT, -- 'easy', 'medium', 'hard'
-    next_review_date TEXT,
-    interval INTEGER DEFAULT 1,
-    ease_factor REAL DEFAULT 2.5,
-    last_reviewed_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
+    CREATE TABLE IF NOT EXISTS cards (
+      id SERIAL PRIMARY KEY,
+      deck_id INTEGER REFERENCES decks(id) ON DELETE CASCADE,
+      term TEXT,
+      meaning TEXT,
+      example TEXT,
+      category TEXT,
+      difficulty TEXT,
+      source TEXT
+    );
 
-  CREATE TABLE IF NOT EXISTS groups (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    code TEXT UNIQUE,
-    created_by INTEGER
-  );
-
-  CREATE TABLE IF NOT EXISTS group_members (
-    group_id INTEGER,
-    user_id INTEGER,
-    role TEXT DEFAULT 'member',
-    PRIMARY KEY(group_id, user_id)
-  );
-`);
-
-// Seed a default user if none exists
-const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
-if (userCount.count === 0) {
-  db.prepare("INSERT INTO users (email, name, streak, xp) VALUES (?, ?, ?, ?)").run("student@nursing.edu", "Nursing Student", 3, 450);
-  
-  // Seed a sample deck
-  const deckResult = db.prepare("INSERT INTO decks (user_id, title, description, category) VALUES (?, ?, ?, ?)").run(
-    1, 
-    "Vital Signs & Assessment", 
-    "Essential terminology for patient assessment and monitoring.", 
-    "Vital Signs"
-  );
-  const deckId = deckResult.lastInsertRowid;
-
-  const sampleCards = [
-    { term: "Auscultation", meaning: "청진 (몸 안의 소리를 듣는 것)", example: "Auscultation of the heart is part of the physical exam.", category: "Assessment", difficulty: "medium", source: "NCLEX" },
-    { term: "Bradycardia", meaning: "서맥 (심박수가 분당 60회 미만)", example: "The patient developed bradycardia after the medication.", category: "Cardiac", difficulty: "easy", source: "NCLEX" },
-    { term: "Tachycardia", meaning: "빈맥 (심박수가 분당 100회 초과)", example: "Fever can cause tachycardia.", category: "Cardiac", difficulty: "easy", source: "NCLEX" },
-    { term: "Hypoxia", meaning: "저산소증", example: "Cyanosis is a late sign of hypoxia.", category: "Respiratory", difficulty: "hard", source: "NCLEX" },
-    { term: "Palpation", meaning: "촉진 (손으로 만져서 진찰하는 것)", example: "Palpation of the abdomen revealed tenderness.", category: "Assessment", difficulty: "medium", source: "NCLEX" },
-    { term: "Cyanosis", meaning: "청색증", example: "The patient's lips showed signs of cyanosis.", category: "Respiratory", difficulty: "medium", source: "NCLEX" },
-    { term: "Dyspnea", meaning: "호흡곤란", example: "The patient complained of severe dyspnea.", category: "Respiratory", difficulty: "medium", source: "NCLEX" },
-    { term: "Hypertension", meaning: "고혈압", example: "Uncontrolled hypertension can lead to stroke.", category: "Cardiac", difficulty: "medium", source: "NCLEX" },
-    { term: "Edema", meaning: "부종", example: "The patient has pitting edema in the lower extremities.", category: "General", difficulty: "easy", source: "NCLEX" },
-    { term: "Ischemia", meaning: "허혈 (혈류 부족)", example: "Myocardial ischemia can cause chest pain.", category: "Cardiac", difficulty: "hard", source: "NCLEX" },
-  ];
-
-  const insertCard = db.prepare("INSERT INTO cards (deck_id, term, meaning, example, category, difficulty, source) VALUES (?, ?, ?, ?, ?, ?, ?)");
-  for (const card of sampleCards) {
-    insertCard.run(deckId, card.term, card.meaning, card.example, card.category, card.difficulty, card.source);
-  }
+    CREATE TABLE IF NOT EXISTS study_sessions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      card_id INTEGER REFERENCES cards(id) ON DELETE CASCADE,
+      status TEXT,
+      next_review_date TEXT,
+      interval INTEGER DEFAULT 1,
+      ease_factor REAL DEFAULT 2.5,
+      last_reviewed_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `;
 }
+
+initDb().catch(console.error);
 
 async function startServer() {
   const app = express();
@@ -110,78 +74,124 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
 
+  // Auth Middleware
+  const authenticate = (req: express.Request & { user: any }, res: express.Response, next: express.NextFunction) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+      req.user = decoded;
+      next();
+    } catch (e) {
+      res.status(401).json({ error: "Invalid token" });
+    }
+  };
+
   // API Routes
-  app.get("/api/user", (req, res) => {
-    const user = db.prepare("SELECT * FROM users LIMIT 1").get();
+  app.post("/api/auth/signup", async (req, res) => {
+    const { email, password, name } = req.body;
+    const password_hash = await bcrypt.hash(password, 10);
+    try {
+      const [user] = await sql`
+        INSERT INTO users (email, password_hash, name)
+        VALUES (${email}, ${password_hash}, ${name})
+        RETURNING id, email, name
+      `;
+      res.json(user);
+    } catch (e) {
+      res.status(400).json({ error: "User already exists" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    const { email, password } = req.body;
+    const [user] = await sql`SELECT * FROM users WHERE email = ${email}`;
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
+    res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
+  });
+
+  app.get("/api/user", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
+    const [user] = await sql`SELECT id, email, name, xp, streak FROM users WHERE id = ${req.user.id}`;
     res.json(user);
   });
 
-  app.get("/api/decks", (req, res) => {
-    const decks = db.prepare(`
+  app.get("/api/user/settings", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
+    const [settings] = await sql`SELECT streak, daily_goal, study_dates FROM users WHERE id = ${req.user.id}`;
+    res.json(settings || { streak: 0, daily_goal: 10, study_dates: [] });
+  });
+
+  app.post("/api/user/settings", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
+    const { streak, daily_goal, study_dates } = req.body;
+    await sql`
+      UPDATE users 
+      SET streak = ${streak}, daily_goal = ${daily_goal}, study_dates = ${JSON.stringify(study_dates)}
+      WHERE id = ${req.user.id}
+    `;
+    res.json({ success: true });
+  });
+
+  // ... (rest of the routes will need to be updated to use authenticate middleware and req.user.id)
+
+  app.get("/api/decks", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
+    const decks = await sql`
       SELECT d.*, 
-             COUNT(c.id) as cardCount,
-             COUNT(CASE WHEN latest_s.status = 'easy' THEN 1 END) as easyCount,
-             COUNT(CASE WHEN latest_s.status = 'medium' THEN 1 END) as mediumCount,
-             COUNT(CASE WHEN latest_s.status = 'hard' THEN 1 END) as hardCount
+             COUNT(c.id) as cardCount
       FROM decks d 
       LEFT JOIN cards c ON d.id = c.deck_id 
-      LEFT JOIN (
-          SELECT card_id, status
-          FROM study_sessions
-          WHERE id IN (
-              SELECT MAX(id)
-              FROM study_sessions
-              GROUP BY card_id
-          )
-      ) latest_s ON c.id = latest_s.card_id
+      WHERE d.user_id = ${req.user.id}
       GROUP BY d.id
-    `).all() as any[];
+    `;
 
     // Fetch preview cards for each deck
     for (const deck of decks) {
-      deck.previewCards = db.prepare("SELECT term FROM cards WHERE deck_id = ? LIMIT 3").all(deck.id);
+      deck.previewCards = await sql`SELECT term FROM cards WHERE deck_id = ${deck.id} LIMIT 3`;
     }
 
     res.json(decks);
   });
 
-  app.delete("/api/decks/:id", (req, res) => {
+  app.delete("/api/decks/:id", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
     const { id } = req.params;
-    db.prepare("DELETE FROM decks WHERE id = ?").run(id);
+    await sql`DELETE FROM decks WHERE id = ${id} AND user_id = ${req.user.id}`;
     res.json({ success: true });
   });
 
-  app.put("/api/decks/:id", (req, res) => {
+  app.put("/api/decks/:id", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
     const { id } = req.params;
     const { title, description } = req.body;
-    db.prepare("UPDATE decks SET title = ?, description = ? WHERE id = ?").run(title, description, id);
+    await sql`UPDATE decks SET title = ${title}, description = ${description} WHERE id = ${id} AND user_id = ${req.user.id}`;
     res.json({ success: true });
   });
 
-  app.post("/api/decks", (req, res) => {
+  app.post("/api/decks", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
     const { title, description, category, cards } = req.body;
-    const user = db.prepare("SELECT id FROM users LIMIT 1").get() as { id: number };
     
-    const deckResult = db.prepare("INSERT INTO decks (user_id, title, description, category) VALUES (?, ?, ?, ?)").run(
-      user.id, title, description || `${cards.length}개의 단어가 포함된 단어장`, category
-    );
-    const deckId = deckResult.lastInsertRowid;
+    const [deck] = await sql`
+      INSERT INTO decks (user_id, title, description, category) 
+      VALUES (${req.user.id}, ${title}, ${description || `${cards.length}개의 단어가 포함된 단어장`}, ${category})
+      RETURNING id
+    `;
+    const deckId = deck.id;
     
-    const insertCard = db.prepare("INSERT INTO cards (deck_id, term, meaning, example, category, difficulty, source) VALUES (?, ?, ?, ?, ?, ?, ?)");
     for (const card of cards) {
-      insertCard.run(deckId, card.term, card.meaning, card.example, card.category, card.difficulty || 'medium', card.source || '');
+      await sql`
+        INSERT INTO cards (deck_id, term, meaning, example, category, difficulty, source) 
+        VALUES (${deckId}, ${card.term}, ${card.meaning}, ${card.example}, ${card.category}, ${card.difficulty || 'medium'}, ${card.source || ''})
+      `;
     }
     
     res.json({ success: true, deckId });
   });
 
-  app.post("/api/decks/generate", async (req, res) => {
+  app.post("/api/decks/generate", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
     const { cards } = req.body;
     const prompt = `Based on these cards, generate a concise title and a short description for a vocabulary deck.
     Cards: ${JSON.stringify(cards.slice(0, 5))}
     Return JSON format: { "title": "...", "description": "..." }`;
     
-    // Using Gemini to generate title and description
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
@@ -191,44 +201,42 @@ async function startServer() {
     res.json(JSON.parse(response.text || '{}'));
   });
 
-  app.get("/api/decks/:id", (req, res) => {
+  app.get("/api/decks/:id", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
     const { id } = req.params;
-    const deck = db.prepare("SELECT * FROM decks WHERE id = ?").get(id);
+    const [deck] = await sql`SELECT * FROM decks WHERE id = ${id} AND user_id = ${req.user.id}`;
     if (!deck) {
-      res.status(404).json({ error: "Deck not found" });
-      return;
+      return res.status(404).json({ error: "Deck not found" });
     }
-    const cards = db.prepare("SELECT * FROM cards WHERE deck_id = ?").all(id) as any[];
-    res.json({ ...(deck as any), words: cards });
+    const cards = await sql`SELECT * FROM cards WHERE deck_id = ${id}`;
+    res.json({ ...deck, words: cards });
   });
 
-  app.get("/api/decks/:id/cards", (req, res) => {
+  app.get("/api/decks/:id/cards", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
     const { id } = req.params;
-    const cards = db.prepare("SELECT * FROM cards WHERE deck_id = ?").all(id);
+    const cards = await sql`SELECT * FROM cards WHERE deck_id = ${id}`;
     res.json(cards);
   });
 
-  app.get("/api/study/today", (req, res) => {
-    const user = db.prepare("SELECT id FROM users LIMIT 1").get() as { id: number };
+  app.get("/api/study/today", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
     const today = new Date().toISOString().split('T')[0];
     
     // Simple logic: cards that haven't been studied yet OR are due today
-    const cards = db.prepare(`
+    const cards = await sql`
       SELECT c.*, s.status, s.next_review_date 
       FROM cards c
-      LEFT JOIN study_sessions s ON c.id = s.card_id AND s.user_id = ?
-      WHERE s.next_review_date IS NULL OR s.next_review_date <= ?
+      JOIN decks d ON c.deck_id = d.id
+      LEFT JOIN study_sessions s ON c.id = s.card_id AND s.user_id = ${req.user.id}
+      WHERE d.user_id = ${req.user.id} AND (s.next_review_date IS NULL OR s.next_review_date <= ${today})
       LIMIT 50
-    `).all(user.id, today);
+    `;
     
     res.json(cards);
   });
 
-  app.post("/api/study/feedback", (req, res) => {
+  app.post("/api/study/feedback", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
     const { cardId, feedback } = req.body; // feedback: 'easy', 'medium', 'hard'
-    const user = db.prepare("SELECT id FROM users LIMIT 1").get() as { id: number };
     
-    const existing = db.prepare("SELECT * FROM study_sessions WHERE user_id = ? AND card_id = ?").get(user.id, cardId) as any;
+    const [existing] = await sql`SELECT * FROM study_sessions WHERE user_id = ${req.user.id} AND card_id = ${cardId}`;
     
     let interval = 1;
     let easeFactor = 2.5;
@@ -254,43 +262,34 @@ async function startServer() {
     const nextReviewStr = nextReview.toISOString().split('T')[0];
 
     if (existing) {
-      db.prepare(`
+      await sql`
         UPDATE study_sessions 
-        SET status = ?, next_review_date = ?, interval = ?, ease_factor = ?, last_reviewed_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(feedback, nextReviewStr, interval, easeFactor, existing.id);
+        SET status = ${feedback}, next_review_date = ${nextReviewStr}, interval = ${interval}, ease_factor = ${easeFactor}, last_reviewed_at = NOW()
+        WHERE id = ${existing.id}
+      `;
     } else {
-      db.prepare(`
+      await sql`
         INSERT INTO study_sessions (user_id, card_id, status, next_review_date, interval, ease_factor)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(user.id, cardId, feedback, nextReviewStr, interval, easeFactor);
+        VALUES (${req.user.id}, ${cardId}, ${feedback}, ${nextReviewStr}, ${interval}, ${easeFactor})
+      `;
     }
 
     // Update user XP
-    db.prepare("UPDATE users SET xp = xp + 10 WHERE id = ?").run(user.id);
+    await sql`UPDATE users SET xp = xp + 10 WHERE id = ${req.user.id}`;
     
-    console.log(`[DEBUG] Feedback saved: cardId=${cardId}, feedback=${feedback}, user=${user.id}`);
-
     res.json({ success: true, nextReview: nextReviewStr });
   });
 
-  app.get("/api/study/status/:status", (req, res) => {
+  app.get("/api/study/status/:status", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
     const { status } = req.params;
-    const user = db.prepare("SELECT id FROM users LIMIT 1").get() as { id: number };
     
-    // Debug: print all statuses
-    const allStatuses = db.prepare("SELECT status, COUNT(*) as count FROM study_sessions WHERE user_id = ? GROUP BY status").all(user.id);
-    console.log(`[DEBUG] All statuses for user ${user.id}:`, allStatuses);
-
-    // Ensure we only get cards that have a study session with the matching status for this user
-    const cards = db.prepare(`
+    const cards = await sql`
       SELECT c.*, s.status 
       FROM cards c
       JOIN study_sessions s ON c.id = s.card_id
-      WHERE s.user_id = ? AND LOWER(s.status) = LOWER(?)
-    `).all(user.id, status);
+      WHERE s.user_id = ${req.user.id} AND LOWER(s.status) = LOWER(${status})
+    `;
     
-    console.log(`[DEBUG] Found ${cards.length} cards for status ${status} for user ${user.id}`);
     res.json(cards);
   });
 
