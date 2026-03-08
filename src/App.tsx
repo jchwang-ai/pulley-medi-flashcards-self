@@ -317,13 +317,13 @@ export default function App() {
         return {
           id: Number(deck.id),
           title: deck.title || '새 단어장',
-          description: deck.description || `${deck.cardCount}개의 단어가 포함된 단어장`,
+          description: deck.description || `${words.length}개의 단어가 포함된 단어장`,
           category: deck.category || 'General',
           cardCount: deck.cardCount || words.length,
           easyCount,
           mediumCount,
           hardCount,
-          previewCards: deck.previewCards || [],
+          previewCards: deck.previewCards || words.slice(0, 3).map((w: any) => ({ term: w.term })),
           words: deck.words || [],
         };
       });
