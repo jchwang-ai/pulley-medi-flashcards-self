@@ -129,7 +129,9 @@ const ProgressBar = ({ progress, color = 'bg-indigo-600' }: { progress: number; 
 );
 
 export default function App() {
-  const [view, setView] = useState<'home' | 'decks' | 'study' | 'groups' | 'reports' | 'upload' | 'auth'>('auth');
+  const [view, setView] = useState<'home' | 'decks' | 'study' | 'groups' | 'reports' | 'upload'>('home');
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [authEmail, setAuthEmail] = useState('');
@@ -140,6 +142,9 @@ export default function App() {
 
   useEffect(() => {
     console.log('token:', token);
+    if (token) {
+      setIsAuthenticated(true);
+    }
   }, [token]);
 
   const handleAuth = async () => {
@@ -158,6 +163,8 @@ export default function App() {
           if (data && data.token) {
             setToken(data.token);
             localStorage.setItem('token', data.token);
+            setIsAuthenticated(true);
+            setCurrentUser(data.user);
             setView('home');
           } else {
             setAuthError('로그인 응답이 올바르지 않습니다.');
@@ -1536,72 +1543,72 @@ const saveDeck = async () => {
     );
   };
 
+  if (!isAuthenticated) {
+    return renderAuth();
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20 md:pb-0">
-      {token && (
-        <>
-          <nav className="fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-slate-200 z-50 hidden md:flex flex-col">
-            <div className="p-6 mb-8">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-xl">P</div>
-                <span className="font-black text-xl tracking-tight text-slate-900">PulleyVocab</span>
-              </div>
-            </div>
+      <nav className="fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-slate-200 z-50 hidden md:flex flex-col">
+        <div className="p-6 mb-8">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-xl">P</div>
+            <span className="font-black text-xl tracking-tight text-slate-900">PulleyVocab</span>
+          </div>
+        </div>
 
-            <div className="flex-1 px-4 space-y-2">
-              {[
-                { id: 'home', icon: BarChart2, label: '홈' },
-                { id: 'decks', icon: BookOpen, label: '단어장' },
-                { id: 'reports', icon: BarChart2, label: '학습 리포트' },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setView(item.id as any)}
-                  className={cn(
-                    'w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all',
-                    view === item.id ? 'bg-indigo-50 text-indigo-600 font-bold' : 'text-slate-500 hover:bg-slate-50'
-                  )}
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
+        <div className="flex-1 px-4 space-y-2">
+          {[
+            { id: 'home', icon: BarChart2, label: '홈' },
+            { id: 'decks', icon: BookOpen, label: '단어장' },
+            { id: 'reports', icon: BarChart2, label: '학습 리포트' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setView(item.id as any)}
+              className={cn(
+                'w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all',
+                view === item.id ? 'bg-indigo-50 text-indigo-600 font-bold' : 'text-slate-500 hover:bg-slate-50'
+              )}
+            >
+              <item.icon className="w-5 h-5" />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
 
-            <div className="p-4 mt-auto border-t border-slate-100">
-              <button 
-                onClick={() => { localStorage.removeItem('token'); setToken(null); setView('auth'); }}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50"
-              >
-                <Settings className="w-5 h-5" />
-                <span>로그아웃</span>
-              </button>
-            </div>
-          </nav>
+        <div className="p-4 mt-auto border-t border-slate-100">
+          <button 
+            onClick={() => { localStorage.removeItem('token'); setToken(null); setIsAuthenticated(false); setView('home'); }}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50"
+          >
+            <Settings className="w-5 h-5" />
+            <span>로그아웃</span>
+          </button>
+        </div>
+      </nav>
 
-          <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 flex md:hidden justify-around p-2">
-            {[
-              { id: 'home', icon: BarChart2, label: '홈' },
-              { id: 'decks', icon: BookOpen, label: '단어장' },
-              { id: 'reports', icon: BarChart2, label: '리포트' },
-            ].map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setView(item.id as any)}
-                className={cn(
-                  'flex flex-col items-center gap-1 p-2 rounded-xl transition-all',
-                  view === item.id ? 'text-indigo-600' : 'text-slate-400'
-                )}
-              >
-                <item.icon className="w-6 h-6" />
-                <span className="text-[10px] font-bold">{item.label}</span>
-              </button>
-            ))}
-          </nav>
-        </>
-      )}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 flex md:hidden justify-around p-2">
+        {[
+          { id: 'home', icon: BarChart2, label: '홈' },
+          { id: 'decks', icon: BookOpen, label: '단어장' },
+          { id: 'reports', icon: BarChart2, label: '리포트' },
+        ].map((item) => (
+          <button
+            key={item.id}
+            onClick={() => setView(item.id as any)}
+            className={cn(
+              'flex flex-col items-center gap-1 p-2 rounded-xl transition-all',
+              view === item.id ? 'text-indigo-600' : 'text-slate-400'
+            )}
+          >
+            <item.icon className="w-6 h-6" />
+            <span className="text-[10px] font-bold">{item.label}</span>
+          </button>
+        ))}
+      </nav>
 
-      <main className={cn(token ? "md:ml-64 p-4 md:p-10 max-w-7xl mx-auto" : "p-4")}>
+      <main className="md:ml-64 p-4 md:p-10 max-w-7xl mx-auto">
         <AnimatePresence mode="wait">
           <motion.div
             key={view}
@@ -1610,7 +1617,6 @@ const saveDeck = async () => {
             exit={{ opacity: 0, x: -10 }}
             transition={{ duration: 0.2 }}
           >
-            {view === 'auth' && renderAuth()}
             {view === 'home' && renderHome()}
             {view === 'decks' && renderDecks()}
             {view === 'upload' && renderUpload()}
