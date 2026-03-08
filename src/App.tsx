@@ -148,7 +148,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: authEmail, password: authPassword, name: authName }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (res.ok) {
         if (authMode === 'login') {
           setToken(data.token);
@@ -156,10 +156,10 @@ export default function App() {
           setView('home');
         } else {
           setAuthMode('login');
-          alert('회원가입이 완료되었습니다. 로그인해주세요.');
+          alert(data?.message || '회원가입이 완료되었습니다. 로그인해주세요.');
         }
       } else {
-        setAuthError(data.error || '인증 실패');
+        setAuthError(data?.message || data?.error || '인증 실패');
       }
     } catch (error) {
       console.error('Auth error:', error);
