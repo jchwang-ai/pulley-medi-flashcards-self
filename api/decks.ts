@@ -48,7 +48,7 @@ export default async function handler(req: any, res: any) {
         newDeck.createdAt
       );
 
-      return res.status(200).json(newDeck);
+      return res.status(200).json(decks);
     }
 
     if (req.method === "DELETE") {
