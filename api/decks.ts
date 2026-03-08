@@ -48,6 +48,17 @@ export default async function handler(req: any, res: any) {
         newDeck.createdAt
       );
 
+      const rows = db.prepare(`
+        SELECT id, name, words, createdAt
+        FROM decks
+        ORDER BY createdAt DESC
+      `).all();
+
+      const decks = rows.map((row: any) => ({
+        ...row,
+        words: JSON.parse(row.words),
+      }));
+
       return res.status(200).json(decks);
     }
 
