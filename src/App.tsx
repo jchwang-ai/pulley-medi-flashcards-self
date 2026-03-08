@@ -309,7 +309,7 @@ const fetchDecks = async () => {
     console.log('Fetched decks data:', data);
 
     const mappedDecks: Deck[] = (Array.isArray(data) ? data : []).map((deck: any) => {
-      const words = Array.isArray(deck.words) ? deck.words : [];
+      const words = Array.isArray(deck.words) ? deck.words : (typeof deck.words === 'string' ? JSON.parse(deck.words) : []);
 
       const easyCount = words.filter((w: any) => w.status === 'easy').length;
       const mediumCount = words.filter((w: any) => w.status === 'medium').length;
