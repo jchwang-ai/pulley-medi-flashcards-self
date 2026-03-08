@@ -2,22 +2,17 @@ import postgres from 'postgres';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-let sql: any = null;
-if (process.env.DATABASE_URL) {
-  sql = postgres(process.env.DATABASE_URL, {
-    ssl: 'require',
-  });
-} else {
-  console.error('DATABASE_URL is missing');
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL is missing');
 }
+
+const sql = postgres(process.env.DATABASE_URL, {
+  ssl: 'require',
+});
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key';
 
 export default async function handler(req: any, res: any) {
-  if (!sql) {
-    console.error("Database connection not initialized");
-    return res.status(500).json({ success: false, message: 'Database configuration error' });
-  }
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }

@@ -210,7 +210,7 @@ export default function App() {
     };
     return fetch(url, { ...options, headers });
   };
-  const [deckFilter, setDeckFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [deckFilter, setDeckFilter] = useState<'all' | 'active' | 'completed' | 'notStarted'>('all');
   const [uploadMode, setUploadMode] = useState<'file' | 'paste'>('paste');
   const [isLoading, setIsLoading] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -798,19 +798,19 @@ const startStudy = async (deckId?: number) => {
         <CardUI className="p-6">
           <h2 className="text-lg font-bold text-slate-900 mb-4">내 단어장 현황</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-slate-50 rounded-xl">
+            <div className="p-4 bg-slate-50 rounded-xl cursor-pointer hover:shadow-sm hover:bg-slate-100 transition" onClick={() => { setDeckFilter('all'); setView('decks'); }}>
               <div className="text-sm text-slate-600 font-bold">전체 단어장</div>
               <div className="text-2xl font-bold text-slate-900">{decks.length}개</div>
             </div>
-            <div className="p-4 bg-indigo-50 rounded-xl">
+            <div className="p-4 bg-indigo-50 rounded-xl cursor-pointer hover:shadow-sm hover:bg-indigo-100 transition" onClick={() => { setDeckFilter('active'); setView('decks'); }}>
               <div className="text-sm text-indigo-600 font-bold">학습중</div>
               <div className="text-2xl font-bold text-indigo-900">{activeDecks}개</div>
             </div>
-            <div className="p-4 bg-emerald-50 rounded-xl">
+            <div className="p-4 bg-emerald-50 rounded-xl cursor-pointer hover:shadow-sm hover:bg-emerald-100 transition" onClick={() => { setDeckFilter('completed'); setView('decks'); }}>
               <div className="text-sm text-emerald-600 font-bold">완료</div>
               <div className="text-2xl font-bold text-emerald-900">{completedDecks}개</div>
             </div>
-            <div className="p-4 bg-slate-50 rounded-xl">
+            <div className="p-4 bg-slate-50 rounded-xl cursor-pointer hover:shadow-sm hover:bg-slate-100 transition" onClick={() => { setDeckFilter('notStarted'); setView('decks'); }}>
               <div className="text-sm text-slate-600 font-bold">시작 전</div>
               <div className="text-2xl font-bold text-slate-900">{notStartedDecks}개</div>
             </div>
@@ -946,7 +946,7 @@ const startStudy = async (deckId?: number) => {
       </div>
 
       <div className="flex gap-2">
-        {(['all', 'active', 'completed'] as const).map((filter) => (
+        {(['all', 'active', 'completed', 'notStarted'] as const).map((filter) => (
           <button
             key={filter}
             onClick={() => setDeckFilter(filter)}
@@ -957,7 +957,7 @@ const startStudy = async (deckId?: number) => {
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             )}
           >
-            {filter === 'all' ? '전체' : filter === 'active' ? '학습중' : '완료'}
+            {filter === 'all' ? '전체' : filter === 'active' ? '학습중' : filter === 'completed' ? '완료' : '시작 전'}
           </button>
         ))}
       </div>
@@ -967,6 +967,7 @@ const startStudy = async (deckId?: number) => {
           const progress = getDeckProgress(deck.id, deck.cardCount);
           if (deckFilter === 'active') return progress.easy < deck.cardCount && deck.cardCount > 0;
           if (deckFilter === 'completed') return progress.easy === deck.cardCount && deck.cardCount > 0;
+          if (deckFilter === 'notStarted') return deck.cardCount > 0 && progress.easy === 0 && progress.medium === 0 && progress.hard === deck.cardCount;
           return true;
         }).map((deck) => {
           const progress = getDeckProgress(deck.id, deck.cardCount);
