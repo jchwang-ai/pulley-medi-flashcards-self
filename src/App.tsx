@@ -6,7 +6,7 @@ import {
   Upload,
   Trophy,
   Users,
-  BarChart2,
+  BarChart3,
   Settings,
   ChevronRight,
   CheckCircle2,
@@ -19,7 +19,8 @@ import {
   HelpCircle,
   ChevronLeft,
   Pencil,
-  Check
+  Check,
+  House
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -828,50 +829,110 @@ const startStudy = async (deckId?: number) => {
   };
 
   const renderAuth = () => (
-    <div className="flex items-center justify-center min-h-screen bg-slate-50">
-      <CardUI className="w-full max-w-md p-8">
-        <h2 className="text-2xl font-bold text-center mb-6">{authMode === 'login' ? '로그인' : '회원가입'}</h2>
-        {authMode === 'signup' && (
-          <input
-            type="text"
-            placeholder="이름"
-            className="w-full p-3 mb-4 border rounded-xl"
-            value={authName}
-            onChange={(e) => setAuthName(e.target.value)}
-          />
-        )}
-        {authError && (
-          <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100">
-            {authError}
+    <div className="min-h-screen flex flex-col md:flex-row bg-[#0B0F19]">
+      {/* Brand Section */}
+      <div className="flex-1 p-12 md:p-20 flex flex-col justify-center text-white">
+        <div className="mb-12">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-indigo-500/20">P</div>
+            <span className="font-black text-3xl tracking-tight">Pulley Campus</span>
           </div>
-        )}
-        <input
-          type="email"
-          placeholder="이메일"
-          className="w-full p-3 mb-4 border rounded-xl"
-          value={authEmail}
-          onChange={(e) => setAuthEmail(e.target.value)}
-        />
-        <input
-          type="password"
-          placeholder="비밀번호"
-          className="w-full p-3 mb-6 border rounded-xl"
-          value={authPassword}
-          onChange={(e) => setAuthPassword(e.target.value)}
-        />
-        <Button className="w-full mb-4" onClick={handleAuth} disabled={isAuthLoading}>
-          {isAuthLoading ? '처리중...' : (authMode === 'login' ? '로그인' : '회원가입')}
-        </Button>
-        <button
-          className="w-full text-sm text-slate-500 hover:text-indigo-600"
-          onClick={() => {
-            setAuthMode(authMode === 'login' ? 'signup' : 'login');
-            setAuthError(null);
-          }}
-        >
-          {authMode === 'login' ? '계정이 없으신가요? 회원가입' : '이미 계정이 있으신가요? 로그인'}
-        </button>
-      </CardUI>
+          <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
+            AI 기반 <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">맞춤형 단어 학습</span>
+          </h1>
+          <p className="text-xl text-slate-400 max-w-lg leading-relaxed">
+            대학 학습에 최적화된 스마트 단어장. <br />
+            AI가 당신의 학습 수준을 분석하여 가장 효율적인 학습 경로를 제시합니다.
+          </p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white/5 p-6 rounded-2xl border border-white/10 backdrop-blur-sm">
+            <div className="text-indigo-400 mb-2">
+              <BookOpen className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-lg mb-1">스마트 학습</h3>
+            <p className="text-sm text-slate-400">학습 수준에 맞춘 최적화된 단어 추천</p>
+          </div>
+          <div className="bg-white/5 p-6 rounded-2xl border border-white/10 backdrop-blur-sm">
+            <div className="text-purple-400 mb-2">
+              <BarChart3 className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-lg mb-1">학습 리포트</h3>
+            <p className="text-sm text-slate-400">데이터 기반의 체계적인 학습 성과 분석</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Auth Card Section */}
+      <div className="flex-1 flex items-center justify-center p-6 md:p-12">
+        <div className="w-full max-w-md bg-white rounded-3xl p-10 shadow-2xl shadow-black/20">
+          <h2 className="text-3xl font-bold text-slate-900 mb-2">{authMode === 'login' ? '환영합니다' : '시작하기'}</h2>
+          <p className="text-slate-500 mb-8">{authMode === 'login' ? '계정에 로그인하여 학습을 계속하세요.' : '풀리캠퍼스 AI 단어장과 함께 학습을 시작하세요.'}</p>
+          
+          {authMode === 'signup' && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">이름</label>
+              <input
+                type="text"
+                placeholder="이름을 입력하세요"
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                value={authName}
+                onChange={(e) => setAuthName(e.target.value)}
+              />
+            </div>
+          )}
+          
+          {authError && (
+            <div className="mb-6 p-4 bg-rose-50 text-rose-600 text-sm rounded-xl border border-rose-100">
+              {authError}
+            </div>
+          )}
+          
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">이메일</label>
+            <input
+              type="email"
+              placeholder="이메일을 입력하세요"
+              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              value={authEmail}
+              onChange={(e) => setAuthEmail(e.target.value)}
+            />
+          </div>
+          
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">비밀번호</label>
+            <input
+              type="password"
+              placeholder="비밀번호를 입력하세요"
+              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)}
+            />
+          </div>
+          
+          <button
+            className="w-full p-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-indigo-500/30 transition-all active:scale-[0.98] disabled:opacity-70"
+            onClick={handleAuth}
+            disabled={isAuthLoading}
+          >
+            {isAuthLoading ? '처리중...' : (authMode === 'login' ? '로그인' : '회원가입')}
+          </button>
+          
+          <div className="mt-8 text-center">
+            <button
+              className="text-sm text-slate-500 hover:text-indigo-600 font-medium transition-colors"
+              onClick={() => {
+                setAuthMode(authMode === 'login' ? 'signup' : 'login');
+                setAuthError(null);
+              }}
+            >
+              {authMode === 'login' ? '계정이 없으신가요? 회원가입' : '이미 계정이 있으신가요? 로그인'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 
@@ -1621,9 +1682,9 @@ const startStudy = async (deckId?: number) => {
 
         <div className="flex-1 px-4 space-y-2">
           {[
-            { id: 'home', icon: BarChart2, label: '홈' },
+            { id: 'home', icon: House, label: '홈' },
             { id: 'decks', icon: BookOpen, label: '단어장' },
-            { id: 'reports', icon: BarChart2, label: '학습 리포트' },
+            { id: 'reports', icon: BarChart3, label: '학습 리포트' },
           ].map((item) => (
             <button
               key={item.id}
@@ -1652,9 +1713,9 @@ const startStudy = async (deckId?: number) => {
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 flex md:hidden justify-around p-2">
         {[
-          { id: 'home', icon: BarChart2, label: '홈' },
+          { id: 'home', icon: House, label: '홈' },
           { id: 'decks', icon: BookOpen, label: '단어장' },
-          { id: 'reports', icon: BarChart2, label: '리포트' },
+          { id: 'reports', icon: BarChart3, label: '리포트' },
         ].map((item) => (
           <button
             key={item.id}
