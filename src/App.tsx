@@ -100,8 +100,8 @@ const Button = ({
   );
 };
 
-const CardUI = ({ children, className }: { children: React.ReactNode; className?: string }) => (
-  <div className={cn('bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden', className)}>
+const CardUI = ({ children, className, onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) => (
+  <div className={cn('bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden', className)} onClick={onClick}>
     {children}
   </div>
 );
@@ -190,8 +190,27 @@ export default function App() {
 
   const handleFeedback = async (feedback: 'easy' | 'medium' | 'hard') => {
     const card = studyCards[currentCardIndex];
-    setFeedbackStats(prev => ({ ...prev, [feedback]: prev[feedback] + 1 }));
-    setGlobalFeedbackStats(prev => ({ ...prev, [feedback]: prev[feedback] + 1 }));
+    const oldFeedback = sessionFeedback.get(card.id);
+
+    // Update stats
+    setFeedbackStats(prev => {
+      const next = { ...prev };
+      if (oldFeedback) {
+        next[oldFeedback] = Math.max(0, next[oldFeedback] - 1);
+      }
+      next[feedback] = next[feedback] + 1;
+      return next;
+    });
+
+    setGlobalFeedbackStats(prev => {
+      const next = { ...prev };
+      if (oldFeedback) {
+        next[oldFeedback] = Math.max(0, next[oldFeedback] - 1);
+      }
+      next[feedback] = next[feedback] + 1;
+      return next;
+    });
+
     setSessionFeedback(prev => new Map(prev).set(card.id, feedback));
     
     await fetch('/api/study/feedback', {
@@ -208,18 +227,21 @@ export default function App() {
     }
   };
 
-  const restartStudy = (onlyReview: boolean) => {
-    let cardsToStudy = onlyReview 
-      ? originalStudyCards.filter(card => {
-          const feedback = sessionFeedback.get(card.id);
-          return feedback === 'hard' || feedback === 'medium';
-        })
-      : originalStudyCards;
+  const restartStudy = (onlyReview: boolean, category?: 'hard' | 'medium' | 'easy') => {
+    let cardsToStudy = originalStudyCards;
+    
+    if (onlyReview) {
+      cardsToStudy = originalStudyCards.filter(card => {
+        const feedback = sessionFeedback.get(card.id);
+        return feedback === 'hard' || feedback === 'medium';
+      });
+    } else if (category) {
+      cardsToStudy = originalStudyCards.filter(card => sessionFeedback.get(card.id) === category);
+    }
     
     setStudyCards(cardsToStudy);
     setCurrentCardIndex(0);
-    setFeedbackStats({ hard: 0, medium: 0, easy: 0 });
-    setSessionFeedback(new Map());
+    // Do not reset feedbackStats or sessionFeedback to maintain state
     setShowSummary(false);
     setIsFlipped(false);
   };
@@ -471,6 +493,13 @@ export default function App() {
     const [isEditing, setIsEditing] = useState(false);
     const [title, setTitle] = useState(deck.title);
     const [description, setDescription] = useState(deck.description);
+    const [cards, setCards] = useState<Card[]>([]);
+
+    useEffect(() => {
+      fetch(`/api/decks/${deck.id}/cards`)
+        .then(res => res.json())
+        .then(setCards);
+    }, [deck.id]);
 
     const handleSave = async () => {
       await fetch(`/api/decks/${deck.id}`, {
@@ -483,9 +512,9 @@ export default function App() {
     };
 
     return (
-      <>
+      <div className="flex flex-col h-[80vh]">
         {isEditing ? (
-          <div className="space-y-4">
+          <div className="space-y-4 flex-1 overflow-y-auto">
             <input 
               type="text" 
               value={title} 
@@ -506,17 +535,36 @@ export default function App() {
           <>
             <h2 className="text-xl font-bold text-slate-900 mb-2">{deck.title}</h2>
             <p className="text-slate-600 mb-4">{deck.description}</p>
-            <div className="text-sm text-slate-500 mb-6 space-y-1">
-              <p>카테고리: {deck.category}</p>
-              <p>총 단어 수: {deck.cardCount}개</p>
+            <div className="flex-1 overflow-y-auto border border-slate-100 rounded-xl mb-4">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-500 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-2">단어</th>
+                    <th className="px-4 py-2">뜻</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {cards.map((card, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-2 font-medium text-slate-800">{card.term}</td>
+                      <td className="px-4 py-2 text-slate-600">{card.meaning}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               <Button variant="outline" className="flex-1" onClick={() => setIsEditing(true)}>수정</Button>
+              <Button variant="danger" className="flex-1" onClick={async () => {
+                await fetch(`/api/decks/${deck.id}`, { method: 'DELETE' });
+                onUpdate();
+                onClose();
+              }}>삭제</Button>
               <Button className="flex-1" onClick={onClose}>닫기</Button>
             </div>
           </>
         )}
-      </>
+      </div>
     );
   }
 
@@ -760,6 +808,14 @@ export default function App() {
   );
 
   const renderStudy = () => {
+    if (studyCards.length === 0) {
+      return (
+        <div className="max-w-xl mx-auto py-10 text-center">
+          <h2 className="text-2xl font-bold">학습할 카드가 없습니다.</h2>
+          <Button className="mt-4" onClick={() => setView('dashboard')}>대시보드로</Button>
+        </div>
+      );
+    }
     const card = studyCards[currentCardIndex];
     if (!card) return null;
 
@@ -769,15 +825,15 @@ export default function App() {
           <div className="text-center space-y-6">
             <h2 className="text-3xl font-bold">학습 완료!</h2>
             <div className="grid grid-cols-3 gap-4">
-              <div className="bg-rose-50 p-4 rounded-xl text-rose-600">
+              <div className="bg-rose-50 p-4 rounded-xl text-rose-600 cursor-pointer hover:bg-rose-100 transition-colors" onClick={() => restartStudy(false, 'hard')}>
                 <div className="text-2xl font-bold">{feedbackStats.hard}</div>
                 <div className="text-xs">모르겠음</div>
               </div>
-              <div className="bg-amber-50 p-4 rounded-xl text-amber-600">
+              <div className="bg-amber-50 p-4 rounded-xl text-amber-600 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => restartStudy(false, 'medium')}>
                 <div className="text-2xl font-bold">{feedbackStats.medium}</div>
                 <div className="text-xs">헷갈림</div>
               </div>
-              <div className="bg-emerald-50 p-4 rounded-xl text-emerald-600">
+              <div className="bg-emerald-50 p-4 rounded-xl text-emerald-600 cursor-pointer hover:bg-emerald-100 transition-colors" onClick={() => restartStudy(false, 'easy')}>
                 <div className="text-2xl font-bold">{feedbackStats.easy}</div>
                 <div className="text-xs">알겠음</div>
               </div>
@@ -785,7 +841,7 @@ export default function App() {
             <div className="flex gap-4">
               <Button variant="outline" className="flex-1" onClick={() => setView('dashboard')}>대시보드로</Button>
               {(feedbackStats.hard > 0 || feedbackStats.medium > 0) && (
-                <Button className="flex-1" onClick={() => restartStudy(true)}>다시 학습하기</Button>
+                <Button className="flex-1" onClick={() => restartStudy(false)}>다시 학습하기</Button>
               )}
             </div>
           </div>
@@ -808,10 +864,10 @@ export default function App() {
             </div>
 
             {/* 학습 통계 표시 영역 */}
-            <div className="flex justify-center gap-4 py-2">
-              <div className="text-xs text-rose-600 font-bold">모르겠음: {feedbackStats.hard}</div>
-              <div className="text-xs text-amber-600 font-bold">헷갈림: {feedbackStats.medium}</div>
-              <div className="text-xs text-emerald-600 font-bold">알겠음: {feedbackStats.easy}</div>
+            <div className="flex justify-center gap-6 py-2">
+              <div className="text-sm text-rose-600 font-bold">모르겠음: {feedbackStats.hard}</div>
+              <div className="text-sm text-amber-600 font-bold">헷갈림: {feedbackStats.medium}</div>
+              <div className="text-sm text-emerald-600 font-bold">알겠음: {feedbackStats.easy}</div>
             </div>
 
             <div className="perspective-1000 h-[400px]">
@@ -826,18 +882,15 @@ export default function App() {
                   "absolute inset-0 backface-hidden bg-white rounded-3xl border-2 border-slate-100 shadow-xl flex flex-col items-center justify-center p-10 text-center",
                   isFlipped && "pointer-events-none"
                 )}>
-                  <div className="text-xs font-bold text-indigo-500 uppercase tracking-widest mb-4">TERM</div>
-                  <h2 className="text-5xl font-bold text-slate-900 mb-8">{card.term}</h2>
+                  <h2 className="text-6xl font-bold text-slate-900 mb-8">{card.term}</h2>
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" className="text-slate-400" onClick={(e) => { e.stopPropagation(); speak(card.term); }}>
+                    <Button variant="outline" size="lg" className="gap-2 font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50" onClick={(e) => { e.stopPropagation(); speak(card.term); }}>
                       <Volume2 className="w-5 h-5" />
-                    </Button>
-                    <Button variant="ghost" size="sm" className="text-indigo-600 font-bold" onClick={(e) => { e.stopPropagation(); speak(card.term); }}>
                       음성 듣기
                     </Button>
                   </div>
-                  <div className="absolute bottom-8 text-slate-300 text-sm flex items-center gap-2">
-                    <HelpCircle className="w-4 h-4" /> 클릭하여 뜻 확인
+                  <div className="absolute bottom-8 text-slate-500 text-lg font-bold flex items-center gap-2">
+                    <HelpCircle className="w-5 h-5" /> 클릭하여 뜻 확인
                   </div>
                 </div>
 
@@ -849,8 +902,8 @@ export default function App() {
                   <div className="text-xs font-bold text-indigo-500 uppercase tracking-widest mb-4">MEANING</div>
                   <h2 className="text-5xl font-bold text-slate-900 mb-6">{card.meaning}</h2>
                   {card.example && (
-                    <div className="bg-white/60 p-4 rounded-2xl border border-indigo-100 max-w-sm">
-                      <p className="text-slate-600 italic text-sm">"{card.example}"</p>
+                    <div className="bg-white/60 p-6 rounded-2xl border border-indigo-100 max-w-sm">
+                      <p className="text-slate-700 italic text-lg">"{card.example}"</p>
                     </div>
                   )}
                 </div>
@@ -858,7 +911,7 @@ export default function App() {
             </div>
 
             <AnimatePresence>
-              {isFlipped && (
+              {isFlipped ? (
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -877,6 +930,11 @@ export default function App() {
                     <span className="text-xs font-bold">알겠음</span>
                   </Button>
                 </motion.div>
+              ) : (
+                <div className="flex justify-between gap-4">
+                  <Button variant="outline" className="flex-1" onClick={() => setCurrentCardIndex(Math.max(0, currentCardIndex - 1))} disabled={currentCardIndex === 0}>이전 단어</Button>
+                  <Button variant="outline" className="flex-1" onClick={() => setCurrentCardIndex(Math.min(studyCards.length - 1, currentCardIndex + 1))} disabled={currentCardIndex === studyCards.length - 1}>다음 단어</Button>
+                </div>
               )}
             </AnimatePresence>
           </>

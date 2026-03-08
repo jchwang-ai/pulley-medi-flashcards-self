@@ -137,6 +137,12 @@ async function startServer() {
     res.json(decks);
   });
 
+  app.delete("/api/decks/:id", (req, res) => {
+    const { id } = req.params;
+    db.prepare("DELETE FROM decks WHERE id = ?").run(id);
+    res.json({ success: true });
+  });
+
   app.put("/api/decks/:id", (req, res) => {
     const { id } = req.params;
     const { title, description } = req.body;
