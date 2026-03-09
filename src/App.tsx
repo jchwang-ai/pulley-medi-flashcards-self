@@ -222,11 +222,7 @@ export default function App() {
     localStorage.setItem(key, String(completedToday));
   }, [currentUser, completedToday]);
 
-  const [studyDates, setStudyDates] = useState<string[]>(() => {
-    const saved = localStorage.getItem('studyDates');
-    return saved ? JSON.parse(saved) : [];
-  });
-
+  const [studyDates, setStudyDates] = useState<string[]>([]);
   const [streak, setStreak] = useState(0);
 
   const calculateStreak = (dates: string[]) => {
@@ -293,16 +289,31 @@ export default function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem('studyDates', JSON.stringify(studyDates));
-    setStreak(calculateStreak(studyDates));
-  }, [studyDates]);
+    if (!currentUser?.id) {
+      setStudyDates([]);
+      setStreak(0);
+      return;
+    }
+
+    const key = `studyDates_${currentUser.id}`;
+    const saved = JSON.parse(localStorage.getItem(key) || '[]');
+    setStudyDates(saved);
+    setStreak(calculateStreak(saved));
+  }, [currentUser]);
 
   const markStudyCompleteToday = () => {
+    if (!currentUser?.id) return;
+    
+    const key = `studyDates_${currentUser.id}`;
     const today = getTodayString();
-    setStudyDates(prev => {
-      if (prev.includes(today)) return prev;
-      return [...prev, today];
-    });
+    const saved = JSON.parse(localStorage.getItem(key) || '[]');
+
+    if (!saved.includes(today)) {
+      const next = [...saved, today];
+      localStorage.setItem(key, JSON.stringify(next));
+      setStudyDates(next);
+      setStreak(calculateStreak(next));
+    }
   };
 
   useEffect(() => {
