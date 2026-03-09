@@ -30,7 +30,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import * as XLSX from 'xlsx';
 
 interface Card {
-  id?: number;
+  id?: number | string;
   term: string;
   meaning: string;
   example?: string;
@@ -400,7 +400,7 @@ const startStudy = async (deckId?: number) => {
 
     const cards: Card[] = studyTerms.length
       ? studyTerms.map((p: any, index: number) => ({
-          id: p.id || index + 1,
+          id: `${deckId}-${p.term}-${index}`,
           term: p.term || '',
           meaning: p.meaning || '',
           example: p.example || '',
@@ -480,8 +480,8 @@ const startStudy = async (deckId?: number) => {
         body: JSON.stringify({
           userId: currentUser.id,
           deckId: card.deckId,
-          cardId: card.id,
-          feedback: feedback
+          term: card.term,
+          status: feedback
         }),
       });
     } catch (error) {
