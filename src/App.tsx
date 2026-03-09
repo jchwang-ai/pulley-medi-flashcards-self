@@ -225,26 +225,27 @@ export default function App() {
   const [studyDates, setStudyDates] = useState<string[]>([]);
 
   const calculateStreak = (dates: string[]) => {
-    const sorted = [...new Set(dates)].sort().reverse();
+    const uniqueDates = new Set(dates);
     let streak = 0;
-
-    const current = new Date();
-    current.setHours(0, 0, 0, 0);
-
-    for (let i = 0; i < sorted.length; i++) {
-      const target = new Date(sorted[i]);
-      target.setHours(0, 0, 0, 0);
-
-      const expected = new Date(current);
-      expected.setDate(current.getDate() - i);
-
-      if (target.getTime() === expected.getTime()) {
-        streak++;
-      } else {
-        break;
-      }
+    
+    let checkDate = new Date();
+    
+    // Check today first
+    let todayString = checkDate.toISOString().split('T')[0];
+    if (!uniqueDates.has(todayString)) {
+        return 0;
     }
-
+    
+    // Now count backwards
+    while (true) {
+        let dateString = checkDate.toISOString().split('T')[0];
+        if (uniqueDates.has(dateString)) {
+            streak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+            break;
+        }
+    }
     return streak;
   };
 
