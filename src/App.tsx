@@ -223,32 +223,32 @@ export default function App() {
   }, [currentUser, completedToday]);
 
   const [studyDates, setStudyDates] = useState<string[]>([]);
-  const [streak, setStreak] = useState(0);
 
   const calculateStreak = (dates: string[]) => {
-    if (!dates.length) return 0;
-
-    const uniqueDates = [...new Set(dates)].sort((a, b) => (a < b ? 1 : -1));
-    let count = 0;
+    const sorted = [...new Set(dates)].sort().reverse();
+    let streak = 0;
 
     const current = new Date();
     current.setHours(0, 0, 0, 0);
 
-    for (let i = 0; i < uniqueDates.length; i++) {
+    for (let i = 0; i < sorted.length; i++) {
+      const target = new Date(sorted[i]);
+      target.setHours(0, 0, 0, 0);
+
       const expected = new Date(current);
       expected.setDate(current.getDate() - i);
 
-      const expectedString = expected.toISOString().split('T')[0];
-
-      if (uniqueDates[i] === expectedString) {
-        count += 1;
+      if (target.getTime() === expected.getTime()) {
+        streak++;
       } else {
         break;
       }
     }
 
-    return count;
+    return streak;
   };
+
+  const streak = calculateStreak(studyDates);
 
   const getMonthCalendarCells = (monthDate: Date, dates: string[]) => {
     const year = monthDate.getFullYear();
@@ -286,34 +286,6 @@ export default function App() {
 
   const changeMonth = (delta: number) => {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1));
-  };
-
-  useEffect(() => {
-    if (!currentUser?.id) {
-      setStudyDates([]);
-      setStreak(0);
-      return;
-    }
-
-    const key = `studyDates_${currentUser.id}`;
-    const saved = JSON.parse(localStorage.getItem(key) || '[]');
-    setStudyDates(saved);
-    setStreak(calculateStreak(saved));
-  }, [currentUser]);
-
-  const markStudyCompleteToday = () => {
-    if (!currentUser?.id) return;
-    
-    const key = `studyDates_${currentUser.id}`;
-    const today = getTodayString();
-    const saved = JSON.parse(localStorage.getItem(key) || '[]');
-
-    if (!saved.includes(today)) {
-      const next = [...saved, today];
-      localStorage.setItem(key, JSON.stringify(next));
-      setStudyDates(next);
-      setStreak(calculateStreak(next));
-    }
   };
 
   useEffect(() => {
