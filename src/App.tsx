@@ -71,7 +71,15 @@ const ProgressBar = ({ progress, color = 'bg-indigo-600' }: { progress: number; 
 
 export default function App() {
   const [view, setView] = useState<'home' | 'decks' | 'study' | 'groups' | 'reports' | 'upload'>('home');
-  const [reportStats, setReportStats] = useState({ easy: 0, medium: 0, hard: 0 });
+  const [progressSummary, setProgressSummary] = useState({
+    easy: 0,
+    medium: 0,
+    hard: 0,
+    totalStudied: 0,
+    reviewNeeded: 0,
+    mastered: 0
+  });
+  const [recommendedReview, setRecommendedReview] = useState([]);
 
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -81,11 +89,14 @@ export default function App() {
 
   useEffect(() => {
     if (view === 'reports' && currentUser) {
-      fetch(`/api/study/progress`, {
+      fetch(`/api/study/progress?userId=${currentUser.id}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
       })
       .then(res => res.json())
-      .then(data => data.summary && setReportStats(data.summary))
+      .then(data => {
+        if (data.summary) setProgressSummary(data.summary);
+        if (data.recommendedReview) setRecommendedReview(data.recommendedReview);
+      })
       .catch(console.error);
     }
   }, [view, currentUser]);
@@ -1093,11 +1104,11 @@ const startStudy = async (deckId?: number) => {
     const allDecks = decks || [];
     const allWords = allDecks.flatMap(deck => deck.words || []);
 
-    const easyWords = reportStats.easy;
-    const mediumWords = reportStats.medium;
-    const hardWords = reportStats.hard;
-    const totalWords = easyWords + mediumWords + hardWords;
-    const reviewNeededWords = mediumWords + hardWords;
+    const easyWords = progressSummary.easy;
+    const mediumWords = progressSummary.medium;
+    const hardWords = progressSummary.hard;
+    const totalWords = progressSummary.totalStudied;
+    const reviewNeededWords = progressSummary.reviewNeeded;
 
     const completedDecksCount = allDecks.filter(deck => {
       const words = deck.words || [];
@@ -1160,21 +1171,21 @@ const startStudy = async (deckId?: number) => {
             <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl"><BookOpen className="w-6 h-6" /></div>
             <div>
               <div className="text-sm text-slate-500">총 학습 단어</div>
-              <div className="text-lg font-bold text-slate-900">총 {stats.totalWords}개 학습</div>
+              <div className="text-lg font-bold text-slate-900">총 {progressSummary.totalStudied}개 학습</div>
             </div>
           </CardUI>
           <CardUI className="p-4 flex items-center gap-4">
             <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><Trophy className="w-6 h-6" /></div>
             <div>
               <div className="text-sm text-slate-500">마스터 단어</div>
-              <div className="text-lg font-bold text-slate-900">{stats.easyWords}개 마스터!</div>
+              <div className="text-lg font-bold text-slate-900">{progressSummary.mastered}개 마스터!</div>
             </div>
           </CardUI>
           <CardUI className="p-4 flex items-center gap-4">
             <div className="p-3 bg-rose-100 text-rose-600 rounded-xl"><AlertCircle className="w-6 h-6" /></div>
             <div>
               <div className="text-sm text-slate-500">복습 필요</div>
-              <div className="text-lg font-bold text-slate-900">{stats.reviewNeededWords}개 연습</div>
+              <div className="text-lg font-bold text-slate-900">{progressSummary.reviewNeeded}개 연습</div>
             </div>
           </CardUI>
           <CardUI className="p-4 flex items-center gap-4">
@@ -1214,15 +1225,18 @@ const startStudy = async (deckId?: number) => {
 
           {/* SECTION 3: Top 5 Hard Words */}
           <CardUI className="p-6 lg:col-span-2">
-            <h3 className="font-bold text-lg text-slate-900 mb-4">다시 보면 좋은 단어</h3>
+            <h3 className="font-bold text-lg text-slate-900 mb-4">복습 추천</h3>
             <div className="space-y-3">
-              {allWords.filter(w => (w as any).status === 'hard').slice(0, 5).map((card, i) => (
-                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
-                  <span className="font-medium text-slate-800">{(card as any).term}</span>
-                  <Button size="sm" variant="outline" onClick={() => startStudy(allDecks.find(d => d.words?.includes(card))?.id || '')}>복습하기</Button>
-                </div>
-              ))}
-              {allWords.filter(w => (w as any).status === 'hard').length === 0 && <div className="text-slate-500 text-sm">복습할 단어가 없습니다.</div>}
+              {recommendedReview.length > 0 ? (
+                recommendedReview.map((card: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
+                    <span className="font-medium text-slate-800">{card.term}</span>
+                    <Button size="sm" variant="outline" onClick={() => startStudy(Number(card.deckId))}>복습하기</Button>
+                  </div>
+                ))
+              ) : (
+                <div className="text-slate-500 text-sm">복습할 단어가 없습니다.</div>
+              )}
             </div>
           </CardUI>
         </div>
