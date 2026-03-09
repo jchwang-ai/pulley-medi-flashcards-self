@@ -1080,10 +1080,10 @@ const startStudy = async (deckId?: number) => {
     const allDecks = decks || [];
     const allWords = allDecks.flatMap(deck => deck.words || []);
 
-    const easyWords = allWords.filter(w => (w as any).status === 'easy').length;
-    const mediumWords = allWords.filter(w => (w as any).status === 'medium').length;
-    const hardWords = allWords.filter(w => (w as any).status === 'hard').length;
-    const totalWords = allWords.length;
+    const easyWords = reviewBuckets.easy.length;
+    const mediumWords = reviewBuckets.medium.length;
+    const hardWords = reviewBuckets.hard.length;
+    const totalWords = easyWords + mediumWords + hardWords;
     const reviewNeededWords = mediumWords + hardWords;
 
     const completedDecksCount = allDecks.filter(deck => {
