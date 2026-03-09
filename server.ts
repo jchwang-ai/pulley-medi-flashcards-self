@@ -295,10 +295,12 @@ async function startServer() {
 
   app.get("/api/study/progress", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
     try {
+      const userId = req.user.id;
+
       const progress = await sql`
-        SELECT status
-        FROM study_sessions
-        WHERE user_id = ${req.user.id}
+        SELECT deck_id, term, status
+        FROM card_progress
+        WHERE user_id = ${userId}
       `;
 
       const summary = {
@@ -314,6 +316,7 @@ async function startServer() {
       });
 
       return res.status(200).json({
+        progress,
         summary,
       });
     } catch (error) {

@@ -81,7 +81,7 @@ export default function App() {
 
   useEffect(() => {
     if (view === 'reports' && currentUser) {
-      fetch(`/api/study/progress?userId=${currentUser.id}`, {
+      fetch(`/api/study/progress`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
       })
       .then(res => res.json())
