@@ -22,7 +22,8 @@ import {
   ChevronLeft,
   Pencil,
   Check,
-  House
+  House,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -768,6 +769,40 @@ const startStudy = async (deckId?: number) => {
     return { hard, medium, easy };
   };
 
+  const handleDemoLogin = async () => {
+    setIsAuthLoading(true);
+    setAuthError(null);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: '99@gmail.com', password: 'demoPassword123!' }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data && data.token) {
+        setToken(data.token);
+        localStorage.setItem('token', data.token);
+        setIsAuthenticated(true);
+        setCurrentUser(data.user);
+        
+        // Cleanup leftover study state
+        localStorage.removeItem("reviewBuckets");
+        localStorage.removeItem("studyDates");
+        localStorage.removeItem("sessionFeedback");
+        localStorage.removeItem("studyCards");
+        
+        setView('home');
+      } else {
+        setAuthError('데모 계정 로그인에 실패했습니다. (데모 계정이 존재하는지 확인해주세요)');
+      }
+    } catch (error) {
+      console.error('Demo login error:', error);
+      setAuthError('서버 연결 중 오류가 발생했습니다.');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
   const renderAuth = () => (
     <div className="min-h-screen flex flex-col md:flex-row bg-[#0B0F19]">
       {/* Brand Section */}
@@ -859,6 +894,31 @@ const startStudy = async (deckId?: number) => {
           >
             {isAuthLoading ? '처리중...' : (authMode === 'login' ? '로그인' : '회원가입')}
           </button>
+
+          {authMode === 'login' && (
+            <div className="mt-4">
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200"></div>
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-white px-2 text-slate-500">또는</span>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={handleDemoLogin}
+                disabled={isAuthLoading}
+              >
+                <Sparkles className="w-4 h-4" />
+                기능 둘러보기
+              </Button>
+              <p className="text-center text-xs text-slate-400 mt-3">
+                회원가입 없이 예시 학습 데이터를 체험해볼 수 있습니다.
+              </p>
+            </div>
+          )}
           
           <div className="mt-8 text-center">
             <button
