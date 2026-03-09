@@ -762,8 +762,11 @@ const startStudy = async (deckId?: number) => {
   };
 
   const getDeckProgress = (deckId: number, totalCount: number) => {
-    const easy = reviewBuckets.easy.filter(card => String(card.deckId) === String(deckId)).length;
-    const medium = reviewBuckets.medium.filter(card => String(card.deckId) === String(deckId)).length;
+    const easyRaw = reviewBuckets.easy.filter(card => String(card.deckId) === String(deckId)).length;
+    const mediumRaw = reviewBuckets.medium.filter(card => String(card.deckId) === String(deckId)).length;
+    
+    const easy = Math.min(easyRaw, totalCount);
+    const medium = Math.min(mediumRaw, totalCount - easy);
     const hard = Math.max(0, totalCount - easy - medium);
 
     return { hard, medium, easy };
