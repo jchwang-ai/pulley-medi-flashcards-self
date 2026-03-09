@@ -776,7 +776,7 @@ const startStudy = async (deckId?: number) => {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: '99@gmail.com', password: 'demoPassword123!' }),
+        body: JSON.stringify({ email: '99@gmail.com', password: '99' }),
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data && data.token) {
