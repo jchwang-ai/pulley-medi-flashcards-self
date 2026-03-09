@@ -5,11 +5,13 @@ const sql = postgres(process.env.DATABASE_URL!, {
 });
 
 export default async function handler(req: any, res: any) {
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
+
     const { userId } = req.query;
 
     if (!userId) {
@@ -25,22 +27,28 @@ export default async function handler(req: any, res: any) {
     const summary = {
       easy: 0,
       medium: 0,
-      hard: 0,
+      hard: 0
     };
 
     progress.forEach((row: any) => {
       if (row.status === 'easy') summary.easy++;
-      else if (row.status === 'medium') summary.medium++;
-      else if (row.status === 'hard') summary.hard++;
+      if (row.status === 'medium') summary.medium++;
+      if (row.status === 'hard') summary.hard++;
     });
 
     return res.status(200).json({
       progress,
-      summary,
+      summary
     });
 
   } catch (error) {
+
     console.error('progress error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+
+    return res.status(500).json({
+      error: 'Internal server error'
+    });
+
   }
+
 }
