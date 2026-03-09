@@ -293,6 +293,35 @@ async function startServer() {
     res.json(cards);
   });
 
+  app.get("/api/study/progress", authenticate, async (req: express.Request & { user: any }, res: express.Response) => {
+    try {
+      const progress = await sql`
+        SELECT status
+        FROM study_sessions
+        WHERE user_id = ${req.user.id}
+      `;
+
+      const summary = {
+        easy: 0,
+        medium: 0,
+        hard: 0,
+      };
+
+      progress.forEach((row: any) => {
+        if (row.status === 'easy') summary.easy++;
+        else if (row.status === 'medium') summary.medium++;
+        else if (row.status === 'hard') summary.hard++;
+      });
+
+      return res.status(200).json({
+        summary,
+      });
+    } catch (error) {
+      console.error('progress error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     console.log("[INFO] Running in development mode with Vite middleware");

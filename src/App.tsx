@@ -71,11 +71,24 @@ const ProgressBar = ({ progress, color = 'bg-indigo-600' }: { progress: number; 
 
 export default function App() {
   const [view, setView] = useState<'home' | 'decks' | 'study' | 'groups' | 'reports' | 'upload'>('home');
+  const [reportStats, setReportStats] = useState({ easy: 0, medium: 0, hard: 0 });
+
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('currentUser');
     return saved ? JSON.parse(saved) : null;
   });
+
+  useEffect(() => {
+    if (view === 'reports' && currentUser) {
+      fetch(`/api/study/progress?userId=${currentUser.id}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+      })
+      .then(res => res.json())
+      .then(data => data.summary && setReportStats(data.summary))
+      .catch(console.error);
+    }
+  }, [view, currentUser]);
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [authEmail, setAuthEmail] = useState('');
@@ -1080,9 +1093,9 @@ const startStudy = async (deckId?: number) => {
     const allDecks = decks || [];
     const allWords = allDecks.flatMap(deck => deck.words || []);
 
-    const easyWords = reviewBuckets.easy.length;
-    const mediumWords = reviewBuckets.medium.length;
-    const hardWords = reviewBuckets.hard.length;
+    const easyWords = reportStats.easy;
+    const mediumWords = reportStats.medium;
+    const hardWords = reportStats.hard;
     const totalWords = easyWords + mediumWords + hardWords;
     const reviewNeededWords = mediumWords + hardWords;
 
