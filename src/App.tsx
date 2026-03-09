@@ -194,12 +194,15 @@ export default function App() {
   const [tempGoal, setTempGoal] = useState(dailyGoal);
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
-const getTodayString = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
+const formatDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+const getTodayString = () => {
+  return formatDate(new Date());
 };
 
   const getDailyProgressKey = (userId: string) => {
@@ -268,6 +271,16 @@ const getTodayString = () => {
   };
 
   useEffect(() => {
+    if (!currentUser?.id) {
+      setStudyDates([]);
+      return;
+    }
+
+    const saved = loadStudyDates(String(currentUser.id));
+    setStudyDates(saved);
+  }, [currentUser]);
+
+  useEffect(() => {
     if (!currentUser?.id) return;
     const key = getStudyDatesKey(String(currentUser.id));
     localStorage.setItem(key, JSON.stringify(studyDates));
@@ -276,30 +289,19 @@ const getTodayString = () => {
   const calculateStreak = (dates: string[]) => {
     const uniqueDates = new Set(dates);
     let streak = 0;
-    
-    let checkDate = new Date();
-    
-    // Check today first
-    let todayString = getTodayString();
-    if (!uniqueDates.has(todayString)) {
-        // If didn't study today, check if studied yesterday
-        checkDate.setDate(checkDate.getDate() - 1);
-        todayString = getTodayString();
-        if (!uniqueDates.has(todayString)) {
-            return 0;
-        }
-    }
-    
-    // Now count backwards
+    const checkDate = new Date();
+
     while (true) {
-        let dateString = getTodayString();
-        if (uniqueDates.has(dateString)) {
-            streak++;
-            checkDate.setDate(checkDate.getDate() - 1);
-        } else {
-            break;
-        }
+      const dateString = formatDate(checkDate);
+
+      if (uniqueDates.has(dateString)) {
+        streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
     }
+
     return streak;
   };
 
@@ -324,7 +326,7 @@ const getTodayString = () => {
     // Days
     for (let i = 1; i <= daysInMonth; i++) {
       const date = new Date(year, month, i);
-      const dateString = date.toISOString().split('T')[0];
+      const dateString = formatDate(date);
       cells.push({
         day: i,
         dateString,
