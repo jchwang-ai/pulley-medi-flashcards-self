@@ -523,18 +523,6 @@ const startStudy = async (deckId?: number) => {
       return next;
     });
 
-    setReviewBuckets(prev => {
-      const removeCard = (list: Card[]) => list.filter(item => item.id !== card.id);
-
-      const next = {
-        hard: removeCard(prev.hard),
-        medium: removeCard(prev.medium),
-        easy: removeCard(prev.easy),
-      };
-
-      next[feedback] = [...next[feedback], card];
-      return next;
-    });
 
     setSessionFeedback((prev) => new Map(prev).set(card.id || 0, feedback));
 
@@ -552,15 +540,23 @@ const startStudy = async (deckId?: number) => {
       console.error('Failed to save feedback:', error);
     }
 
-    if (currentCardIndex < studyCards.length - 1) {
-      setCurrentCardIndex((prev) => prev + 1);
-      setIsFlipped(false);
-    } else {
-      markStudyCompleteToday();
-      setCompletedToday(prev => prev + studyCards.length);
-      setShowSummary(true);
-    }
-  };
+if (currentCardIndex < studyCards.length - 1) {
+  setCurrentCardIndex((prev) => prev + 1);
+  setIsFlipped(false);
+} else {
+  markStudyCompleteToday();
+  setCompletedToday((prev) => prev + studyCards.length);
+  await fetchDecks();
+
+  if (view === 'reports') {
+    const res = await authFetch(`/api/study/progress?userId=${currentUser.id}`);
+    const data = await res.json();
+    if (data.summary) setProgressSummary(data.summary);
+    if (data.recommendedReview) setRecommendedReview(data.recommendedReview);
+  }
+
+  setShowSummary(true);
+}
 
   const [filteredCards, setFilteredCards] = useState<Card[]>([]);
   const [isFiltering, setIsFiltering] = useState(false);
@@ -685,24 +681,40 @@ const startStudy = async (deckId?: number) => {
   };
 
   const renderHome = () => {
-    const totalWords = Array.isArray(decks) ? decks.reduce((acc, deck) => acc + (deck.cardCount || 0), 0) : 0;
-    const easyWords = Array.isArray(reviewBuckets?.easy) ? reviewBuckets.easy.length : 0;
-    const hardWords = Array.isArray(reviewBuckets?.hard) ? reviewBuckets.hard.length : 0;
-    const mediumWords = Array.isArray(reviewBuckets?.medium) ? reviewBuckets.medium.length : 0;
-    const unstudiedWords = Math.max(0, totalWords - (easyWords + hardWords + mediumWords));
+const totalWords = decks.reduce((acc, deck) => acc + deck.words.length, 0);
 
-    const completedDecks = Array.isArray(decks) ? decks.filter(deck => {
-      const progress = getDeckProgress(deck.id, deck.cardCount || 0);
-      return progress.easy === (deck.cardCount || 0) && (deck.cardCount || 0) > 0;
-    }).length : 0;
-    const activeDecks = Array.isArray(decks) ? decks.filter(deck => {
-      const progress = getDeckProgress(deck.id, deck.cardCount || 0);
-      return progress.easy < (deck.cardCount || 0) && (deck.cardCount || 0) > 0;
-    }).length : 0;
-    const notStartedDecks = Array.isArray(decks) ? decks.filter(deck => {
-      const progress = getDeckProgress(deck.id, deck.cardCount || 0);
-      return (deck.cardCount || 0) > 0 && progress.easy === 0 && progress.medium === 0 && progress.hard === (deck.cardCount || 0);
-    }).length : 0;
+const easyWords = decks.reduce(
+  (acc, deck) => acc + deck.words.filter((w: any) => w.status === 'easy').length,
+  0
+);
+
+const mediumWords = decks.reduce(
+  (acc, deck) => acc + deck.words.filter((w: any) => w.status === 'medium').length,
+  0
+);
+
+const hardWords = decks.reduce(
+  (acc, deck) => acc + deck.words.filter((w: any) => w.status === 'hard').length,
+  0
+);
+
+const studiedWords = easyWords + mediumWords + hardWords;
+const unstudiedWords = Math.max(0, totalWords - studiedWords);
+
+const completedDecks = decks.filter((deck) => {
+  const progress = getDeckProgress(deck);
+  return progress.total > 0 && progress.easy === progress.total;
+}).length;
+
+const activeDecks = decks.filter((deck) => {
+  const progress = getDeckProgress(deck);
+  return progress.total > 0 && (progress.easy + progress.medium + progress.hard) > 0 && progress.easy < progress.total;
+}).length;
+
+const notStartedDecks = decks.filter((deck) => {
+  const progress = getDeckProgress(deck);
+  return progress.total > 0 && progress.easy === 0 && progress.medium === 0 && progress.hard === 0;
+}).length;
 
     const unstudiedPercent = totalWords > 0 ? (unstudiedWords / totalWords) * 100 : 0;
     const unknownPercent = totalWords > 0 ? (hardWords / totalWords) * 100 : 0;
@@ -733,15 +745,24 @@ const startStudy = async (deckId?: number) => {
               <div className="text-sm text-slate-600 font-bold">미학습</div>
               <div className="text-3xl font-bold text-slate-900">{unstudiedWords}</div>
             </div>
-            <div className="bg-[#9CA3AF] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => startReviewFromBucket('hard')}>
+            <div className="bg-[#9CA3AF] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => {
+  setView('decks');
+  setDeckFilter('all');
+}}>
               <div className="text-sm text-white font-bold">모르겠음</div>
               <div className="text-3xl font-bold text-white">{hardWords}</div>
             </div>
-            <div className="bg-[#F59E0B] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => startReviewFromBucket('medium')}>
+            <div className="bg-[#F59E0B] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => {
+  setView('decks');
+  setDeckFilter('all');
+}}>
               <div className="text-sm text-white font-bold">헷갈림</div>
               <div className="text-3xl font-bold text-white">{mediumWords}</div>
             </div>
-            <div className="bg-[#10B981] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => startReviewFromBucket('easy')}>
+            <div className="bg-[#10B981] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => {
+  setView('decks');
+  setDeckFilter('all');
+}}>
               <div className="text-sm text-white font-bold">알겠음</div>
               <div className="text-3xl font-bold text-white">{easyWords}</div>
             </div>
@@ -825,16 +846,24 @@ const startStudy = async (deckId?: number) => {
     );
   };
 
-  const getDeckProgress = (deckId: number, totalCount: number) => {
-    const easyRaw = reviewBuckets.easy.filter(card => String(card.deckId) === String(deckId)).length;
-    const mediumRaw = reviewBuckets.medium.filter(card => String(card.deckId) === String(deckId)).length;
-    
-    const easy = Math.min(easyRaw, totalCount);
-    const medium = Math.min(mediumRaw, totalCount - easy);
-    const hard = Math.max(0, totalCount - easy - medium);
+const getDeckProgress = (deck: Deck) => {
+  const words = Array.isArray(deck.words) ? deck.words : [];
 
-    return { hard, medium, easy };
+  const easy = words.filter((w: any) => w.status === 'easy').length;
+  const medium = words.filter((w: any) => w.status === 'medium').length;
+  const hard = words.filter((w: any) => w.status === 'hard').length;
+
+  const studied = easy + medium + hard;
+  const unstudied = Math.max(0, words.length - studied);
+
+  return {
+    easy,
+    medium,
+    hard,
+    unstudied,
+    total: words.length,
   };
+};
 
   const handleDemoLogin = async () => {
     setIsAuthLoading(true);
@@ -1058,13 +1087,21 @@ const startStudy = async (deckId?: number) => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {(decks || []).filter(deck => {
-            const progress = getDeckProgress(deck.id, deck.cardCount);
-            if (deckFilter === 'active') return progress.easy < deck.cardCount && deck.cardCount > 0;
-            if (deckFilter === 'completed') return progress.easy === deck.cardCount && deck.cardCount > 0;
-            if (deckFilter === 'notStarted') return deck.cardCount > 0 && progress.easy === 0 && progress.medium === 0 && progress.hard === deck.cardCount;
+            const progress = getDeckProgress(deck);
+            if (deckFilter === 'active') {
+  return progress.total > 0 && (progress.easy + progress.medium + progress.hard) > 0 && progress.easy < progress.total;
+}
+
+if (deckFilter === 'completed') {
+  return progress.total > 0 && progress.easy === progress.total;
+}
+
+if (deckFilter === 'notStarted') {
+  return progress.total > 0 && progress.easy === 0 && progress.medium === 0 && progress.hard === 0;
+}
             return true;
           }).map((deck) => {
-            const progress = getDeckProgress(deck.id, deck.cardCount);
+            const progress = getDeckProgress(deck);
             const isCompleted = progress.easy === deck.cardCount && deck.cardCount > 0;
             return (
               <div key={deck.id} className="relative">
@@ -1149,10 +1186,10 @@ const startStudy = async (deckId?: number) => {
     const totalWords = progressSummary.totalStudied;
     const reviewNeededWords = progressSummary.reviewNeeded;
 
-    const completedDecksCount = allDecks.filter(deck => {
-      const words = deck.words || [];
-      return words.length > 0 && words.every(w => (w as any).status === 'easy');
-    }).length;
+const completedDecksCount = allDecks.filter((deck) => {
+  const progress = getDeckProgress(deck);
+  return progress.total > 0 && progress.easy === progress.total;
+}).length;
 
     const todayKey = `dailyProgress_${currentUser.id}_${getTodayString()}`;
     const studiedTodayCount = Number(localStorage.getItem(todayKey) || 0);
@@ -1383,7 +1420,9 @@ const startStudy = async (deckId?: number) => {
               <Button variant="outline" className="flex-1" onClick={() => setIsEditing(true)}>수정</Button>
               <Button variant="danger" className="flex-1" onClick={async () => {
                 if (!currentUser) return;
-                await fetch(`/api/decks?id=${deck.id}&userId=${currentUser.id}`, { method: 'DELETE' });
+                await authFetch(`/api/decks?id=${deck.id}&userId=${currentUser.id}`, {
+  method: 'DELETE',
+});
                 onUpdate();
                 onClose();
               }}>
