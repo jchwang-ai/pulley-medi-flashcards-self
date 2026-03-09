@@ -139,7 +139,6 @@ export default function App() {
             
             // Cleanup leftover study state
             localStorage.removeItem("reviewBuckets");
-            localStorage.removeItem("studyDates");
             localStorage.removeItem("sessionFeedback");
             localStorage.removeItem("studyCards");
             setReviewBuckets({
@@ -221,6 +220,50 @@ export default function App() {
     const key = getDailyProgressKey(String(currentUser.id));
     localStorage.setItem(key, String(completedToday));
   }, [currentUser, completedToday]);
+
+  const getStudyDatesKey = (userId: string) => {
+    return `studyDates_${userId}`;
+  };
+
+  const loadStudyDates = (userId: string) => {
+    try {
+      const key = getStudyDatesKey(userId);
+      return JSON.parse(localStorage.getItem(key) || '[]');
+    } catch {
+      return [];
+    }
+  };
+
+  const saveTodayStudy = (userId: string) => {
+    const key = getStudyDatesKey(userId);
+    const today = getTodayString();
+    const saved = loadStudyDates(userId);
+
+    if (!saved.includes(today)) {
+      const next = [...saved, today];
+      localStorage.setItem(key, JSON.stringify(next));
+      return next;
+    }
+
+    return saved;
+  };
+
+  const markStudyCompleteToday = () => {
+    if (!currentUser?.id) return;
+
+    const nextDates = saveTodayStudy(String(currentUser.id));
+    setStudyDates(nextDates);
+  };
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setStudyDates([]);
+      return;
+    }
+
+    const saved = loadStudyDates(String(currentUser.id));
+    setStudyDates(saved);
+  }, [currentUser]);
 
   const [studyDates, setStudyDates] = useState<string[]>([]);
 
@@ -798,7 +841,6 @@ const startStudy = async (deckId?: number) => {
         
         // Cleanup leftover study state
         localStorage.removeItem("reviewBuckets");
-        localStorage.removeItem("studyDates");
         localStorage.removeItem("sessionFeedback");
         localStorage.removeItem("studyCards");
         
