@@ -1072,30 +1072,41 @@ const startStudy = async (deckId?: number) => {
   };
 
   const renderReports = () => {
-    const allWords = decks.flatMap(d => d.words || []);
+    if (!currentUser) return null;
+
+    const allDecks = decks || [];
+    const allWords = allDecks.flatMap(deck => deck.words || []);
+
+    const easyWords = allWords.filter(w => (w as any).status === 'easy').length;
+    const mediumWords = allWords.filter(w => (w as any).status === 'medium').length;
+    const hardWords = allWords.filter(w => (w as any).status === 'hard').length;
+    const totalWords = allWords.length;
+    const reviewNeededWords = mediumWords + hardWords;
+
+    const completedDecksCount = allDecks.filter(deck => {
+      const words = deck.words || [];
+      return words.length > 0 && words.every(w => (w as any).status === 'easy');
+    }).length;
+
+    const todayKey = `dailyProgress_${currentUser.id}_${getTodayString()}`;
+    const studiedTodayCount = Number(localStorage.getItem(todayKey) || 0);
 
     const stats = {
-      total: allWords.length,
-      easy: allWords.filter(w => (w as any).status === "easy").length,
-      medium: allWords.filter(w => (w as any).status === "medium").length,
-      hard: allWords.filter(w => (w as any).status === "hard").length
+      totalWords,
+      easyWords,
+      mediumWords,
+      hardWords,
+      reviewNeededWords,
+      completedDecks: completedDecksCount,
+      streak,
+      studiedTodayCount,
+      dailyGoal,
     };
 
-    if (!decks.length) {
-      stats.total = 0;
-      stats.easy = 0;
-      stats.medium = 0;
-      stats.hard = 0;
-    }
-
-    const totalWords = stats.total;
-    const reviewNeeded = stats.hard + stats.medium;
-    const easyWords = stats.easy;
-
-    const data = [
-      { name: '알겠음', value: stats.easy, color: '#10b981' },
-      { name: '헷갈림', value: stats.medium, color: '#f59e0b' },
-      { name: '모르겠음', value: stats.hard, color: '#f43f5e' },
+    const understandingData = [
+      { name: '알겠음', value: stats.easyWords, color: '#10b981' },
+      { name: '헷갈림', value: stats.mediumWords, color: '#f59e0b' },
+      { name: '모르겠음', value: stats.hardWords, color: '#f43f5e' },
     ];
 
     return (
@@ -1108,16 +1119,16 @@ const startStudy = async (deckId?: number) => {
         {/* SECTION 6: AI Coach (Moved to Top) */}
         <AICoachCard 
           stats={{
-            totalWords: stats.total,
-            easy: stats.easy,
-            medium: stats.medium,
-            hard: stats.hard,
-            todayProgress: completedToday,
-            dailyGoal: dailyGoal,
-            streak: streak,
-            completedDecks: decks.filter(d => getDeckProgress(d.id, d.cardCount).easy === d.cardCount && d.cardCount > 0).length,
-            notStartedDecks: decks.filter(d => d.cardCount > 0 && getDeckProgress(d.id, d.cardCount).easy === 0 && getDeckProgress(d.id, d.cardCount).medium === 0 && getDeckProgress(d.id, d.cardCount).hard === d.cardCount).length,
-            reviewNeeded: reviewNeeded,
+            totalWords: stats.totalWords,
+            easy: stats.easyWords,
+            medium: stats.mediumWords,
+            hard: stats.hardWords,
+            todayProgress: stats.studiedTodayCount,
+            dailyGoal: stats.dailyGoal,
+            streak: stats.streak,
+            completedDecks: stats.completedDecks,
+            notStartedDecks: allDecks.filter(d => d.words?.length > 0 && d.words.every(w => (w as any).status !== 'easy' && (w as any).status !== 'medium')).length,
+            reviewNeeded: stats.reviewNeededWords,
             userName: currentUser?.name || '학생'
           }}
           onAction={(action) => {
@@ -1133,28 +1144,28 @@ const startStudy = async (deckId?: number) => {
             <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl"><BookOpen className="w-6 h-6" /></div>
             <div>
               <div className="text-sm text-slate-500">총 학습 단어</div>
-              <div className="text-lg font-bold text-slate-900">총 {totalWords}개 학습</div>
+              <div className="text-lg font-bold text-slate-900">총 {stats.totalWords}개 학습</div>
             </div>
           </CardUI>
           <CardUI className="p-4 flex items-center gap-4">
             <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><Trophy className="w-6 h-6" /></div>
             <div>
               <div className="text-sm text-slate-500">마스터 단어</div>
-              <div className="text-lg font-bold text-slate-900">{easyWords}개 마스터!</div>
+              <div className="text-lg font-bold text-slate-900">{stats.easyWords}개 마스터!</div>
             </div>
           </CardUI>
           <CardUI className="p-4 flex items-center gap-4">
             <div className="p-3 bg-rose-100 text-rose-600 rounded-xl"><AlertCircle className="w-6 h-6" /></div>
             <div>
               <div className="text-sm text-slate-500">복습 필요</div>
-              <div className="text-lg font-bold text-slate-900">{reviewNeeded}개 연습</div>
+              <div className="text-lg font-bold text-slate-900">{stats.reviewNeededWords}개 연습</div>
             </div>
           </CardUI>
           <CardUI className="p-4 flex items-center gap-4">
             <div className="p-3 bg-orange-100 text-orange-600 rounded-xl"><Flame className="w-6 h-6" /></div>
             <div>
               <div className="text-sm text-slate-500">연속 학습</div>
-              <div className="text-lg font-bold text-slate-900">🔥 {streak}일 연속</div>
+              <div className="text-lg font-bold text-slate-900">🔥 {stats.streak}일 연속</div>
             </div>
           </CardUI>
         </div>
@@ -1164,9 +1175,9 @@ const startStudy = async (deckId?: number) => {
           <CardUI className="p-6 lg:col-span-1">
             <h3 className="font-bold text-lg text-slate-900 mb-4">나의 단어 이해도</h3>
             <div className="space-y-4">
-              {data.map((item) => {
+              {understandingData.map((item) => {
                 const count = item.value;
-                const percentage = totalWords > 0 ? Math.round((count / totalWords) * 100) : 0;
+                const percentage = stats.totalWords > 0 ? Math.round((count / stats.totalWords) * 100) : 0;
                 return (
                   <div key={item.name} className="space-y-1">
                     <div className="flex justify-between text-sm">
@@ -1180,20 +1191,22 @@ const startStudy = async (deckId?: number) => {
                 );
               })}
             </div>
-            <div className="text-center text-sm text-slate-600 mt-6">"좋아요! 절반 이상의 단어를 이해하고 있어요."</div>
+            <div className="text-center text-sm text-slate-600 mt-6">
+              {stats.totalWords === 0 ? "학습을 시작해보세요!" : "학습을 꾸준히 이어가고 있어요."}
+            </div>
           </CardUI>
 
           {/* SECTION 3: Top 5 Hard Words */}
           <CardUI className="p-6 lg:col-span-2">
             <h3 className="font-bold text-lg text-slate-900 mb-4">다시 보면 좋은 단어</h3>
             <div className="space-y-3">
-              {reviewBuckets.hard.slice(0, 5).map((card, i) => (
+              {allWords.filter(w => (w as any).status === 'hard').slice(0, 5).map((card, i) => (
                 <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
-                  <span className="font-medium text-slate-800">{card.term}</span>
-                  <Button size="sm" variant="outline" onClick={() => startStudy(card.deckId)}>복습하기</Button>
+                  <span className="font-medium text-slate-800">{(card as any).term}</span>
+                  <Button size="sm" variant="outline" onClick={() => startStudy(allDecks.find(d => d.words?.includes(card))?.id || '')}>복습하기</Button>
                 </div>
               ))}
-              {reviewBuckets.hard.length === 0 && <div className="text-slate-500 text-sm">복습할 단어가 없습니다.</div>}
+              {allWords.filter(w => (w as any).status === 'hard').length === 0 && <div className="text-slate-500 text-sm">복습할 단어가 없습니다.</div>}
             </div>
           </CardUI>
         </div>
