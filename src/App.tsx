@@ -194,10 +194,13 @@ export default function App() {
   const [tempGoal, setTempGoal] = useState(dailyGoal);
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
-  const getTodayString = () => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  };
+const getTodayString = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
   const getDailyProgressKey = (userId: string) => {
     return `dailyProgress_${userId}_${getTodayString()}`;
@@ -248,24 +251,27 @@ export default function App() {
     return saved;
   };
 
+  const [studyDates, setStudyDates] = useState<string[]>([]);
+
   const markStudyCompleteToday = () => {
     if (!currentUser?.id) return;
 
-    const nextDates = saveTodayStudy(String(currentUser.id));
-    setStudyDates(nextDates);
+    setStudyDates((prev) => {
+      const today = getTodayString();
+      if (prev.includes(today)) return prev;
+
+      const next = [...prev, today];
+      const key = getStudyDatesKey(String(currentUser.id));
+      localStorage.setItem(key, JSON.stringify(next));
+      return next;
+    });
   };
 
   useEffect(() => {
-    if (!currentUser?.id) {
-      setStudyDates([]);
-      return;
-    }
-
-    const saved = loadStudyDates(String(currentUser.id));
-    setStudyDates(saved);
-  }, [currentUser]);
-
-  const [studyDates, setStudyDates] = useState<string[]>([]);
+    if (!currentUser?.id) return;
+    const key = getStudyDatesKey(String(currentUser.id));
+    localStorage.setItem(key, JSON.stringify(studyDates));
+  }, [currentUser, studyDates]);
 
   const calculateStreak = (dates: string[]) => {
     const uniqueDates = new Set(dates);
@@ -274,14 +280,19 @@ export default function App() {
     let checkDate = new Date();
     
     // Check today first
-    let todayString = checkDate.toISOString().split('T')[0];
+    let todayString = getTodayString();
     if (!uniqueDates.has(todayString)) {
-        return 0;
+        // If didn't study today, check if studied yesterday
+        checkDate.setDate(checkDate.getDate() - 1);
+        todayString = getTodayString();
+        if (!uniqueDates.has(todayString)) {
+            return 0;
+        }
     }
     
     // Now count backwards
     while (true) {
-        let dateString = checkDate.toISOString().split('T')[0];
+        let dateString = getTodayString();
         if (uniqueDates.has(dateString)) {
             streak++;
             checkDate.setDate(checkDate.getDate() - 1);
