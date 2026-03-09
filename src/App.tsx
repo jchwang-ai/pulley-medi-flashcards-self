@@ -557,6 +557,7 @@ if (currentCardIndex < studyCards.length - 1) {
 
   setShowSummary(true);
 }
+}
 
   const [filteredCards, setFilteredCards] = useState<Card[]>([]);
   const [isFiltering, setIsFiltering] = useState(false);
