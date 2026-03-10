@@ -26,40 +26,53 @@ export default async function handler(req: any, res: any) {
 
   try {
     await initTable();
+
     const { userId, deckId, term, status } = req.body;
 
     if (!userId || !deckId || !term || !status) {
-      return res.status(400).json({ error: 'Missing required parameters: userId, deckId, term, status' });
+      return res.status(400).json({
+        error: 'Missing required parameters: userId, deckId, term, status'
+      });
     }
 
     if (!['easy', 'medium', 'hard'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status value' });
     }
 
-    // Upsert logic: Check if record exists for user + deck + term
+    const normalizedUserId = String(userId);
+    const normalizedDeckId = String(deckId);
+    const normalizedTerm = String(term).trim();
+
     const existing = await sql`
-      SELECT id FROM card_progress 
-      WHERE user_id = ${userId} AND deck_id = ${deckId} AND term = ${term}
+      SELECT id
+      FROM card_progress
+      WHERE user_id = ${normalizedUserId}
+        AND deck_id = ${normalizedDeckId}
+        AND term = ${normalizedTerm}
       LIMIT 1
     `;
 
     if (existing.length > 0) {
       await sql`
-        UPDATE card_progress 
+        UPDATE card_progress
         SET status = ${status}, updated_at = NOW()
         WHERE id = ${existing[0].id}
       `;
     } else {
-      const id = `${userId}_${deckId}_${term}_${Date.now()}`;
+      const id = `${normalizedUserId}_${normalizedDeckId}_${normalizedTerm}_${Date.now()}`;
+
       await sql`
         INSERT INTO card_progress (id, user_id, deck_id, term, status)
-        VALUES (${id}, ${userId}, ${deckId}, ${term}, ${status})
+        VALUES (${id}, ${normalizedUserId}, ${normalizedDeckId}, ${normalizedTerm}, ${status})
       `;
     }
 
     return res.status(200).json({ success: true });
   } catch (error: any) {
     console.error('api/study/feedback error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({
+      error: 'Internal server error',
+      detail: error?.message || String(error)
+    });
   }
 }
