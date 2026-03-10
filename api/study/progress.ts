@@ -16,12 +16,16 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Missing userId' });
     }
 
-    // Get latest progress for each word
+    // deck_id + term 기준으로 각 단어의 최신 학습 상태 조회
     const progress = await sql`
-      SELECT DISTINCT ON (term) term, status
+      SELECT DISTINCT ON (deck_id, term)
+        deck_id,
+        term,
+        status,
+        updated_at
       FROM card_progress
       WHERE user_id = ${userId}
-      ORDER BY term, updated_at DESC
+      ORDER BY deck_id, term, updated_at DESC
     `;
 
     const summary = {
@@ -43,15 +47,22 @@ export default async function handler(req: any, res: any) {
     summary.reviewNeeded = summary.medium + summary.hard;
     summary.mastered = summary.easy;
 
-    // Recommended review: hard first, then medium
+    // 복습 추천: hard 우선, 그다음 medium
     const recommendedReview = progress
       .filter((row: any) => row.status === 'medium' || row.status === 'hard')
       .sort((a: any, b: any) => {
         if (a.status === 'hard' && b.status === 'medium') return -1;
         if (a.status === 'medium' && b.status === 'hard') return 1;
-        return 0;
+
+        // 같은 상태면 최근에 학습한 순으로 정렬
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
       })
-      .slice(0, 5);
+      .slice(0, 5)
+      .map((row: any) => ({
+        deckId: row.deck_id,
+        term: row.term,
+        status: row.status
+      }));
 
     return res.status(200).json({
       progress,
