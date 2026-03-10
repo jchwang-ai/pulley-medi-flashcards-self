@@ -96,23 +96,25 @@ export default async function handler(req: any, res: any) {
       `;
 
       // Get latest progress for each word
-      const progress = await sql`
-        SELECT DISTINCT ON (term) term, status
-        FROM card_progress
-        WHERE user_id = ${userId}
-        ORDER BY term, updated_at DESC
-      `;
+const progress = await sql`
+  SELECT DISTINCT ON (deck_id, term) deck_id, term, status
+  FROM card_progress
+  WHERE user_id = ${userId}
+  ORDER BY deck_id, term, updated_at DESC
+`;
 
-      const progressMap = new Map(progress.map((p: any) => [p.term, p.status]));
+const progressMap = new Map(
+  progress.map((p: any) => [`${p.deck_id}::${p.term}`, p.status])
+);
 
       // Merge status into words
-      const decksWithProgress = decks.map((deck: any) => ({
-        ...deck,
-        words: (Array.isArray(deck.words) ? deck.words : []).map((word: any) => ({
-          ...word,
-          status: progressMap.get(word.term)
-        }))
-      }));
+const decksWithProgress = decks.map((deck: any) => ({
+  ...deck,
+  words: (Array.isArray(deck.words) ? deck.words : []).map((word: any) => ({
+    ...word,
+    status: progressMap.get(`${deck.id}::${word.term}`) || null
+  }))
+}));
 
       return res.status(200).json(decksWithProgress);
     }
@@ -142,7 +144,8 @@ export default async function handler(req: any, res: any) {
       if (!id || !userId) {
         return res.status(400).json({ error: "ID and userId are required" });
       }
-      await sql`DELETE FROM decks WHERE id = ${id} AND user_id = ${userId}`;
+await sql`DELETE FROM card_progress WHERE deck_id = ${id} AND user_id = ${userId}`;
+await sql`DELETE FROM decks WHERE id = ${id} AND user_id = ${userId}`;
       return res.status(200).json({ success: true });
     }
 
