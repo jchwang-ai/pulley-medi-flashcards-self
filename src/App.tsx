@@ -96,7 +96,7 @@ export default function App() {
   });
 
   useEffect(() => {
-    if (view === 'reports' && currentUser) {
+    if ((view === 'reports' || view === 'home') && currentUser) {
       fetch(`/api/study/progress?userId=${currentUser.id}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
       })
@@ -748,125 +748,137 @@ const notStartedDecks = decks.filter((deck) => {
 
     return (
       <div className="space-y-8">
-        {/* 1. Greeting + Learning streak + AI Coach */}
-        <div className="flex flex-col md:flex-row gap-6">
-          <header className="flex-1">
-            <h1 className="text-2xl font-bold text-slate-900">안녕하세요, {user?.name || 'Nursing Student'}!</h1>
-            <div className="flex items-center gap-1.5 text-indigo-600 font-bold mt-2 bg-indigo-50 px-3 py-1.5 rounded-full w-fit">
-              <Flame className="w-5 h-5" />
-              <span>{streak}일 연속 학습 중! 학습 습관이 만들어지고 있어요.</span>
+        {/* 1. Learning streak + Today's goal */}
+        <div className="flex flex-col md:flex-row gap-4 items-stretch">
+          <CardUI className="flex-1 p-6 bg-gradient-to-br from-orange-50 to-rose-50 border-orange-100 flex flex-col justify-center">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-orange-200">
+                <Flame className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-sm text-orange-600 font-bold uppercase tracking-wider">연속 학습</div>
+                <div className="text-2xl font-black text-slate-900">{streak}일째</div>
+              </div>
             </div>
-          </header>
-          <CardUI className="p-4 bg-slate-50 border-slate-100 flex-1">
-            <p className="text-sm text-slate-600 font-medium">오늘은 헷갈리는 단어 5개만 더 복습하면 이번 주 목표를 달성할 수 있어요!</p>
+          </CardUI>
+
+          <CardUI className="flex-[1.5] p-6 bg-white border-slate-100">
+            <div className="flex justify-between items-end mb-3">
+              <div>
+                <div className="text-sm text-slate-500 font-bold uppercase tracking-wider mb-1">오늘의 목표</div>
+                <div className="text-2xl font-black text-slate-900">{completedToday} <span className="text-slate-400 text-lg font-bold">/ {dailyGoal}</span></div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs font-bold text-indigo-600 mb-1">{Math.round(dailyGoal > 0 ? Math.min(100, (completedToday / dailyGoal) * 100) : 0)}% 달성</div>
+                <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${dailyGoal > 0 ? Math.min(100, (completedToday / dailyGoal) * 100) : 0}%` }}
+                    className="h-full bg-indigo-600"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+              <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+              <p className="text-sm text-indigo-900 font-medium">
+                {completedToday >= dailyGoal 
+                  ? "오늘 목표를 달성했어요! 정말 대단해요 👏" 
+                  : `지금 ${dailyGoal - completedToday}개만 더 학습하면 오늘 목표를 달성할 수 있어요.`}
+              </p>
+            </div>
           </CardUI>
         </div>
 
-        {/* 2. Learning Status Summary */}
+        {/* 2. Large Continue Study Button */}
+        <div className="relative group">
+          <div className="absolute -inset-1 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-3xl blur opacity-25 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
+          <Button 
+            className="relative w-full py-8 text-xl font-black rounded-3xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:scale-[1.01] transition-all shadow-xl shadow-indigo-200"
+            onClick={() => setView('decks')}
+          >
+            {completedToday === 0 ? "오늘 학습 시작하기" : "이어서 학습하기"}
+            <ChevronRight className="w-6 h-6 ml-2" />
+          </Button>
+        </div>
+
+        {/* 3. Word Understanding Summary */}
         <CardUI className="p-6">
-          <h2 className="text-lg font-bold text-slate-900 mb-4">나의 단어 이해 상태</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-bold text-slate-900">나의 단어 이해 상태</h2>
+            <Button variant="ghost" size="sm" className="text-indigo-600 font-bold" onClick={() => setView('reports')}>상세 리포트 <ChevronRight className="w-4 h-4" /></Button>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-[#E5E7EB] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => { setView('decks'); setDeckFilter('active'); }}>
-              <div className="text-sm text-slate-600 font-bold">미학습</div>
-              <div className="text-3xl font-bold text-slate-900">{unstudiedWords}</div>
+            <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 cursor-pointer hover:bg-blue-100 transition-colors" onClick={() => { setView('decks'); setDeckFilter('active'); }}>
+              <div className="text-xs text-blue-600 font-black uppercase tracking-widest mb-1">미학습</div>
+              <div className="text-3xl font-black text-blue-900">{unstudiedWords}</div>
             </div>
-            <div className="bg-[#9CA3AF] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => {
-  setView('decks');
-  setDeckFilter('all');
-}}>
-              <div className="text-sm text-white font-bold">모르겠음</div>
-              <div className="text-3xl font-bold text-white">{hardWords}</div>
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => { setView('decks'); setDeckFilter('all'); }}>
+              <div className="text-xs text-slate-500 font-black uppercase tracking-widest mb-1">모르겠음</div>
+              <div className="text-3xl font-black text-slate-900">{hardWords}</div>
             </div>
-            <div className="bg-[#F59E0B] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => {
-  setView('decks');
-  setDeckFilter('all');
-}}>
-              <div className="text-sm text-white font-bold">헷갈림</div>
-              <div className="text-3xl font-bold text-white">{mediumWords}</div>
+            <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 cursor-pointer hover:bg-orange-100 transition-colors" onClick={() => { setView('decks'); setDeckFilter('all'); }}>
+              <div className="text-xs text-orange-600 font-black uppercase tracking-widest mb-1">헷갈림</div>
+              <div className="text-3xl font-black text-orange-900">{mediumWords}</div>
             </div>
-            <div className="bg-[#10B981] p-4 rounded-xl cursor-pointer hover:opacity-90 transition-opacity" onClick={() => {
-  setView('decks');
-  setDeckFilter('all');
-}}>
-              <div className="text-sm text-white font-bold">알겠음</div>
-              <div className="text-3xl font-bold text-white">{easyWords}</div>
+            <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 cursor-pointer hover:bg-emerald-100 transition-colors" onClick={() => { setView('decks'); setDeckFilter('all'); }}>
+              <div className="text-xs text-emerald-600 font-black uppercase tracking-widest mb-1">알겠음</div>
+              <div className="text-3xl font-black text-emerald-900">{easyWords}</div>
             </div>
           </div>
-          <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex mb-4">
-            <div className="h-full" style={{ width: `${unstudiedPercent}%`, backgroundColor: '#E5E7EB' }} />
-            <div className="h-full" style={{ width: `${unknownPercent}%`, backgroundColor: '#9CA3AF' }} />
-            <div className="h-full" style={{ width: `${confusingPercent}%`, backgroundColor: '#F59E0B' }} />
-            <div className="h-full" style={{ width: `${knownPercent}%`, backgroundColor: '#10B981' }} />
+          <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex">
+            <div className="h-full bg-blue-500" style={{ width: `${unstudiedPercent}%` }} />
+            <div className="h-full bg-slate-400" style={{ width: `${unknownPercent}%` }} />
+            <div className="h-full bg-orange-500" style={{ width: `${confusingPercent}%` }} />
+            <div className="h-full bg-emerald-500" style={{ width: `${knownPercent}%` }} />
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-slate-500 mb-6 font-medium">
-            <div className="flex flex-col"><span>미학습</span><span className="text-slate-900 font-bold">{unstudiedWords}개 ({Math.round(unstudiedPercent)}%)</span></div>
-            <div className="flex flex-col"><span>모르겠음</span><span className="text-slate-900 font-bold">{hardWords}개 ({Math.round(unknownPercent)}%)</span></div>
-            <div className="flex flex-col"><span>헷갈림</span><span className="text-slate-900 font-bold">{mediumWords}개 ({Math.round(confusingPercent)}%)</span></div>
-            <div className="flex flex-col"><span>알겠음</span><span className="text-slate-900 font-bold">{easyWords}개 ({Math.round(knownPercent)}%)</span></div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            {/* Review buttons removed */}
-          </div>
-        </CardUI>
-        
-        {/* 4. 오늘의 학습 */}
-        <CardUI className="p-6 border-indigo-100 shadow-indigo-100/50">
-          <h2 className="text-lg font-bold text-slate-900 mb-4">오늘의 학습</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <div className="text-sm text-slate-500">오늘 목표</div>
-                {isEditingGoal ? (
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      value={tempGoal}
-                      onChange={(e) => setTempGoal(Number(e.target.value))}
-                      className="w-16 px-1 text-sm border rounded"
-                    />
-                    <button onClick={() => { setDailyGoal(tempGoal); setIsEditingGoal(false); }} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded">
-                      <Check className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={() => setIsEditingGoal(true)} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded">
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              <div className="text-2xl font-bold text-slate-900 mb-4">{dailyGoal} 단어</div>
-              <div className="text-sm text-slate-500 mb-1">진행률</div>
-              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-600 transition-all duration-500" style={{ width: `${dailyGoal > 0 ? Math.min(100, (completedToday / dailyGoal) * 100) : 0}%` }} />
-              </div>
-              <div className="text-sm font-bold text-slate-900 mt-1">{completedToday} / {dailyGoal || 0} 완료</div>
-            </div>
-          </div>
-          <Button className="w-full mt-6" size="lg" onClick={() => setView('decks')}>학습 시작하기</Button>
         </CardUI>
 
-        {/* 5. 내 단어장 현황 */}
-        <CardUI className="p-6">
-          <h2 className="text-lg font-bold text-slate-900 mb-4">내 단어장 현황</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-slate-50 rounded-xl cursor-pointer hover:shadow-sm hover:bg-slate-100 transition" onClick={() => { setDeckFilter('all'); setView('decks'); }}>
-              <div className="text-sm text-slate-600 font-bold">전체 단어장</div>
-              <div className="text-2xl font-bold text-slate-900">{decks.length}개</div>
-            </div>
-            <div className="p-4 bg-indigo-50 rounded-xl cursor-pointer hover:shadow-sm hover:bg-indigo-100 transition" onClick={() => { setDeckFilter('active'); setView('decks'); }}>
-              <div className="text-sm text-indigo-600 font-bold">학습중</div>
-              <div className="text-2xl font-bold text-indigo-900">{activeDecks}개</div>
-            </div>
-            <div className="p-4 bg-emerald-50 rounded-xl cursor-pointer hover:shadow-sm hover:bg-emerald-100 transition" onClick={() => { setDeckFilter('completed'); setView('decks'); }}>
-              <div className="text-sm text-emerald-600 font-bold">완료</div>
-              <div className="text-2xl font-bold text-emerald-900">{completedDecks}개</div>
-            </div>
-            <div className="p-4 bg-slate-50 rounded-xl cursor-pointer hover:shadow-sm hover:bg-slate-100 transition" onClick={() => { setDeckFilter('notStarted'); setView('decks'); }}>
-              <div className="text-sm text-slate-600 font-bold">시작 전</div>
-              <div className="text-2xl font-bold text-slate-900">{notStartedDecks}개</div>
+        {/* 4. Recommended Review Words */}
+        {recommendedReview.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold text-slate-900 px-1">추천 복습 단어</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {recommendedReview.slice(0, 3).map((word: any, i: number) => (
+                <CardUI key={i} className="p-4 flex items-center justify-between hover:border-indigo-200 transition-colors group">
+                  <div>
+                    <div className="text-lg font-bold text-slate-900">{word.term}</div>
+                    <div className="text-sm text-slate-500 truncate max-w-[150px]">{word.meaning}</div>
+                  </div>
+                  <Button size="sm" variant="outline" className="group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all" onClick={() => startStudy(Number(word.deckId))}>
+                    복습하기
+                  </Button>
+                </CardUI>
+              ))}
             </div>
           </div>
-        </CardUI>
+        )}
+
+        {/* 5. Deck Overview */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-lg font-bold text-slate-900">내 단어장 현황</h2>
+            <Button variant="ghost" size="sm" className="text-slate-500 font-bold" onClick={() => setView('decks')}>전체 보기 <ChevronRight className="w-4 h-4" /></Button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 bg-white border border-slate-100 rounded-2xl cursor-pointer hover:shadow-sm hover:bg-slate-50 transition" onClick={() => { setDeckFilter('all'); setView('decks'); }}>
+              <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">전체</div>
+              <div className="text-2xl font-black text-slate-900">{decks.length}</div>
+            </div>
+            <div className="p-4 bg-white border border-slate-100 rounded-2xl cursor-pointer hover:shadow-sm hover:bg-slate-50 transition" onClick={() => { setDeckFilter('active'); setView('decks'); }}>
+              <div className="text-xs text-indigo-600 font-bold uppercase tracking-wider mb-1">학습중</div>
+              <div className="text-2xl font-black text-indigo-900">{activeDecks}</div>
+            </div>
+            <div className="p-4 bg-white border border-slate-100 rounded-2xl cursor-pointer hover:shadow-sm hover:bg-slate-50 transition" onClick={() => { setDeckFilter('completed'); setView('decks'); }}>
+              <div className="text-xs text-emerald-600 font-bold uppercase tracking-wider mb-1">완료</div>
+              <div className="text-2xl font-black text-emerald-900">{completedDecks}</div>
+            </div>
+            <div className="p-4 bg-white border border-slate-100 rounded-2xl cursor-pointer hover:shadow-sm hover:bg-slate-50 transition" onClick={() => { setDeckFilter('notStarted'); setView('decks'); }}>
+              <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">시작 전</div>
+              <div className="text-2xl font-black text-slate-900">{notStartedDecks}</div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
