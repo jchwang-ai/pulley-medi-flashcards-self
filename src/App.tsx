@@ -274,64 +274,56 @@ const getTodayString = () => {
     localStorage.setItem(key, String(completedToday));
   }, [currentUser, completedToday]);
 
-  const getStudyDatesKey = (userId: string) => {
-    return `studyDates_${userId}`;
-  };
-
-  const loadStudyDates = (userId: string) => {
+    const loadStudyDates = async (userId: string) => {
     try {
-      const key = getStudyDatesKey(userId);
-      return JSON.parse(localStorage.getItem(key) || '[]');
-    } catch {
+      const res = await authFetch(`/api/study/activity?userId=${userId}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data?.dates) ? data.dates : [];
+    } catch (error) {
+      console.error('Failed to load study dates:', error);
       return [];
     }
   };
 
-  const saveTodayStudy = (userId: string) => {
-    const key = getStudyDatesKey(userId);
-    const today = getTodayString();
-    const saved = loadStudyDates(userId);
-
-    if (!saved.includes(today)) {
-      const next = [...saved, today];
-      localStorage.setItem(key, JSON.stringify(next));
-      return next;
-    }
-
-    return saved;
-  };
-
   const [studyDates, setStudyDates] = useState<string[]>([]);
 
-  const markStudyCompleteToday = () => {
+  const markStudyCompleteToday = async () => {
     if (!currentUser?.id) return;
 
-    setStudyDates((prev) => {
-      const today = getTodayString();
-      if (prev.includes(today)) return prev;
+    const today = getTodayString();
 
-      const next = [...prev, today];
-      const key = getStudyDatesKey(String(currentUser.id));
-      localStorage.setItem(key, JSON.stringify(next));
-      return next;
-    });
+    try {
+      await authFetch('/api/study/activity', {
+        method: 'POST',
+        body: JSON.stringify({
+          userId: currentUser.id,
+          studyDate: today,
+        }),
+      });
+
+      setStudyDates((prev) => {
+        if (prev.includes(today)) return prev;
+        return [...prev, today];
+      });
+    } catch (error) {
+      console.error('Failed to save study activity:', error);
+    }
   };
 
   useEffect(() => {
-    if (!currentUser?.id) {
-      setStudyDates([]);
-      return;
-    }
+    const fetchStudyDates = async () => {
+      if (!currentUser?.id) {
+        setStudyDates([]);
+        return;
+      }
 
-    const saved = loadStudyDates(String(currentUser.id));
-    setStudyDates(saved);
+      const dates = await loadStudyDates(String(currentUser.id));
+      setStudyDates(dates);
+    };
+
+    fetchStudyDates();
   }, [currentUser]);
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    const key = getStudyDatesKey(String(currentUser.id));
-    localStorage.setItem(key, JSON.stringify(studyDates));
-  }, [currentUser, studyDates]);
 
   const calculateStreak = (dates: string[]) => {
     const uniqueDates = new Set(dates);
@@ -570,10 +562,9 @@ const startStudy = async (deckId?: number) => {
     setIsLoading(false);
   }
 };
-
   const handleFeedback = async (feedback: 'easy' | 'medium' | 'hard') => {
     const card = studyCards[currentCardIndex];
-    if (!card) return;
+    if (!card || !currentUser) return;
 
     const oldFeedback = sessionFeedback.get(card.id || 0);
 
@@ -585,7 +576,6 @@ const startStudy = async (deckId?: number) => {
       next[feedback] = next[feedback] + 1;
       return next;
     });
-
 
     setSessionFeedback((prev) => new Map(prev).set(card.id || 0, feedback));
 
@@ -603,24 +593,22 @@ const startStudy = async (deckId?: number) => {
       console.error('Failed to save feedback:', error);
     }
 
-if (currentCardIndex < studyCards.length - 1) {
-  setCurrentCardIndex((prev) => prev + 1);
-  setIsFlipped(false);
-} else {
-  markStudyCompleteToday();
-  setCompletedToday((prev) => prev + studyCards.length);
-  await fetchDecks();
+    if (currentCardIndex < studyCards.length - 1) {
+      setCurrentCardIndex((prev) => prev + 1);
+      setIsFlipped(false);
+    } else {
+      await markStudyCompleteToday();
+      setCompletedToday((prev) => prev + studyCards.length);
+      await fetchDecks();
 
-  if (view === 'reports') {
-    const res = await authFetch(`/api/study/progress?userId=${currentUser.id}`);
-    const data = await res.json();
-    if (data.summary) setProgressSummary(data.summary);
-    if (data.recommendedReview) setRecommendedReview(data.recommendedReview);
-  }
+      const res = await authFetch(`/api/study/progress?userId=${currentUser.id}`);
+      const data = await res.json();
+      if (data.summary) setProgressSummary(data.summary);
+      if (data.recommendedReview) setRecommendedReview(data.recommendedReview);
 
-  setShowSummary(true);
-}
-}
+      setShowSummary(true);
+    }
+  };
 
   const [filteredCards, setFilteredCards] = useState<Card[]>([]);
   const [isFiltering, setIsFiltering] = useState(false);

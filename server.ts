@@ -16,6 +16,8 @@ const sql = postgres(process.env.DATABASE_URL!, {
 
 import { GoogleGenAI } from "@google/genai";
 
+import activityHandler from "./api/study/activity.js";
+
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 // Initialize database schema
@@ -324,6 +326,8 @@ async function startServer() {
       return res.status(500).json({ error: 'Internal server error' });
     }
   });
+
+  app.all("/api/study/activity", activityHandler);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
