@@ -50,7 +50,15 @@ interface Deck {
   mediumCount: number;
   hardCount: number;
   previewCards: { term: string }[];
-  words: { term: string; meaning: string; example: string }[];
+  words: {
+    term: string;
+    meaning: string;
+    example?: string;
+    category?: string;
+    difficulty?: string;
+    source?: string;
+    status?: "easy" | "medium" | "hard";
+  }[];
 }
 
 interface User {
@@ -409,47 +417,63 @@ const getTodayString = () => {
     }
   };
 
-  const fetchDecks = async () => {
-    if (!currentUser) return;
-    try {
-      const res = await authFetch(`/api/decks?userId=${currentUser.id}`);
-      if (!res.ok) {
-        setDecks([]);
-        return;
-      }
+ const fetchDecks = async () => {
+  if (!currentUser) return;
 
-      const data = await res.json();
-      console.log('Fetched decks data:', data);
+  try {
+    const res = await authFetch(`/api/decks?userId=${currentUser.id}`);
 
-      const mappedDecks: Deck[] = (Array.isArray(data) ? data : []).map((deck: any) => {
-        const words = Array.isArray(deck.words) ? deck.words : (typeof deck.words === 'string' ? JSON.parse(deck.words) : []);
-
-        const easyCount = words.filter((w: any) => w.status === 'easy').length;
-        const mediumCount = words.filter((w: any) => w.status === 'medium').length;
-        const hardCount = words.filter((w: any) => w.status === 'hard').length;
-
-        return {
-          id: Number(deck.id),
-          title: deck.name || '새 단어장',
-          description: `${words.length}개의 단어가 포함된 단어장`,
-          category: deck.category || 'General',
-          cardCount: words.length,
-          easyCount,
-          mediumCount,
-          hardCount,
-          previewCards: words.slice(0, 3).map((w: any) => ({
-            term: w?.term || '',
-          })),
-          words: words,
-        };
-      });
-
-      setDecks(mappedDecks);
-    } catch (error) {
-      console.error('fetchDecks error:', error);
+    if (!res.ok) {
       setDecks([]);
+      return;
     }
-  };
+
+    const data = await res.json();
+
+    const mappedDecks: Deck[] = (Array.isArray(data) ? data : []).map((deck: any) => {
+      const words = Array.isArray(deck.words)
+        ? deck.words
+        : (typeof deck.words === 'string' ? JSON.parse(deck.words) : []);
+
+      const normalizedWords = words.map((w: any) => ({
+        term: w?.term || w?.word || w?.text || '',
+        meaning: w?.meaning || w?.definition || '',
+        example: w?.example || '',
+        category: w?.category || '',
+        difficulty: w?.difficulty || 'medium',
+        source: w?.source || '',
+        status:
+          w?.status === 'easy' || w?.status === 'medium' || w?.status === 'hard'
+            ? w.status
+            : 'hard',
+      })).filter((w: any) => w.term && w.meaning);
+
+      const easyCount = normalizedWords.filter((w: any) => w.status === 'easy').length;
+      const mediumCount = normalizedWords.filter((w: any) => w.status === 'medium').length;
+      const hardCount = normalizedWords.filter((w: any) => w.status === 'hard').length;
+
+      return {
+        id: Number(deck.id),
+        title: deck.name || '새 단어장',
+        description: `${normalizedWords.length}개의 단어가 포함된 단어장`,
+        category: deck.category || 'General',
+        cardCount: normalizedWords.length,
+        easyCount,
+        mediumCount,
+        hardCount,
+        previewCards: normalizedWords.slice(0, 3).map((w: any) => ({
+          term: w.term,
+        })),
+        words: normalizedWords,
+      };
+    });
+
+    setDecks(mappedDecks);
+  } catch (error) {
+    console.error('fetchDecks error:', error);
+    setDecks([]);
+  }
+};
 
 const startStudy = async (deckId?: number) => {
   try {
@@ -615,48 +639,48 @@ if (currentCardIndex < studyCards.length - 1) {
     };
     reader.readAsBinaryString(file);
   };
-  const saveDeck = async () => {
-    if (!currentUser) return;
-    if (!uploadMeta.title) {
-      alert('단어장 제목을 입력해주세요.');
+ const saveDeck = async () => {
+  if (!currentUser) return;
+  if (!uploadMeta.title) {
+    alert('단어장 제목을 입력해주세요.');
+    return;
+  }
+
+  try {
+    const validWords = uploadData.filter(
+      (item) => item.term?.trim() && item.meaning?.trim()
+    );
+
+    const res = await authFetch('/api/decks', {
+      method: 'POST',
+      body: JSON.stringify({
+        userId: currentUser.id,
+        name: uploadMeta.title,
+        category: uploadMeta.category,
+        words: validWords
+      }),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('saveDeck error:', errorText);
+      alert('단어장 저장 중 오류가 발생했습니다.');
       return;
     }
 
-    try {
-      const validWords = uploadData.filter(
-        (item) => item.term?.trim() && item.meaning?.trim()
-      );
+    await fetchDecks();
+    setView('decks');
 
-      const res = await authFetch('/api/decks', {
-        method: 'POST',
-        body: JSON.stringify({
-          userId: currentUser.id,
-          name: uploadMeta.title,
-          category: uploadMeta.category,
-          words: validWords
-        }),
-      });
+    setUploadData([
+      { term: '', meaning: '', example: '', category: '', difficulty: 'medium', source: '' }
+    ]);
 
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error('saveDeck error:', errorText);
-        alert('단어장 저장 중 오류가 발생했습니다.');
-        return;
-      }
-
-      await fetchDecks();
-      setView('decks');
-
-      setUploadData([
-        { term: '', meaning: '', example: '', category: '', difficulty: 'medium', source: '' }
-      ]);
-
-      setUploadMeta({ title: '', category: 'General' });
-    } catch (error) {
-      console.error('saveDeck error:', error);
-      alert('단어장 저장 중 오류가 발생했습니다.');
-    }
-  };
+    setUploadMeta({ title: '', category: 'General' });
+  } catch (error) {
+    console.error('saveDeck error:', error);
+    alert('단어장 저장 중 오류가 발생했습니다.');
+  }
+};
 
   const speak = (text: string) => {
     const utterance = new SpeechSynthesisUtterance(text);
@@ -1361,14 +1385,18 @@ const completedDecksCount = allDecks.filter((deck) => {
     const [description, setDescription] = useState(deck.description);
     const [cards, setCards] = useState<Card[]>([]);
 
-    useEffect(() => {
-      const previewCards = (deck.previewCards || []).map((c, index) => ({
-        id: index + 1,
-        term: c.term,
-        meaning: '',
-      }));
-      setCards(previewCards);
-    }, [deck]);
+useEffect(() => {
+  const fullCards = (deck.words || []).map((c, index) => ({
+    id: index + 1,
+    term: c.term,
+    meaning: c.meaning || '',
+    example: c.example || '',
+    category: c.category || '',
+    difficulty: c.difficulty || 'medium',
+    source: c.source || '',
+  }));
+  setCards(fullCards);
+}, [deck]);
 
     const handleSave = async () => {
       onUpdate();
