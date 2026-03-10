@@ -43,15 +43,13 @@ export const Button = ({
 export const CardUI = ({
   children,
   className,
-  onClick
-}: {
-  children: React.ReactNode;
-  className?: string;
-  onClick?: () => void;
-}) => (
+  onClick,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn('bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col', className)}
     onClick={onClick}
+    {...props}
   >
     {children}
   </div>

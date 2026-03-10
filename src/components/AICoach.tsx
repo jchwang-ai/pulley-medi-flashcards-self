@@ -50,10 +50,22 @@ export const TypewriterText = ({ text, speed = 30 }: { text: string; speed?: num
 // 2. Logic Functions
 export const generateCoachMessage = (stats: CoachStats): string => {
   if (stats.totalWords === 0) return "아직 학습 데이터가 많지 않아요. 첫 단어장부터 차근차근 시작해보세요.";
+  
+  const remainingToday = stats.dailyGoal - stats.todayProgress;
+  if (remainingToday > 0 && remainingToday <= 10) {
+    return `지금 ${remainingToday}개만 더 학습하면 오늘 목표를 달성할 수 있어요. 조금만 더 힘내세요!`;
+  }
+
+  if (stats.hard > 0) {
+    return `오늘은 헷갈리는 단어 ${stats.hard}개를 먼저 복습해보는 건 어떨까요? 확실히 내 것으로 만들 수 있어요.`;
+  }
+
   if (stats.streak >= 3) return `좋은 학습 습관이 형성되고 있어요. 최근 ${stats.streak}일 이상 꾸준히 학습하고 있어 기억 유지에 유리한 흐름입니다.`;
-  if (stats.hard > stats.easy + stats.medium) return "이미 이해한 단어도 많지만, 헷갈리는 단어를 조금만 더 정리하면 학습 효율이 크게 올라갑니다.";
+  
   if (stats.notStartedDecks > 0) return "아직 시작하지 않은 단어장이 남아 있어요. 지금 학습 흐름이 좋을 때 하나씩 시작해보면 좋습니다.";
+  
   if (stats.completedDecks > 0) return "첫 단어장을 완료했어요. 학습 루틴이 잘 잡히고 있습니다.";
+  
   return `${stats.userName}님, 오늘도 즐겁게 학습해볼까요?`;
 };
 
