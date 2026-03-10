@@ -858,16 +858,15 @@ if (currentCardIndex < studyCards.length - 1) {
         {/* 3. AI Coach Suggestion */}
         <AICoachCard 
           stats={{
-            totalWords,
-            easy: easyWords,
-            medium: mediumWords,
-            hard: hardWords,
-            todayProgress: completedToday,
             dailyGoal,
+            completedToday,
+            remainingWords: Math.max(0, dailyGoal - completedToday),
             streak,
-            completedDecks,
-            notStartedDecks,
+            hardWords,
+            mediumWords,
+            easyWords,
             reviewNeeded: hardWords + mediumWords,
+            lastStudyDate: studyDates.length > 0 ? studyDates[studyDates.length - 1] : '',
             userName: currentUser?.name || '학생'
           }}
           onAction={(action) => {
@@ -1394,16 +1393,15 @@ const completedDecksCount = allDecks.filter((deck) => {
         {/* SECTION 6: AI Coach (Moved to Top) */}
         <AICoachCard 
           stats={{
-            totalWords: stats.totalWords,
-            easy: stats.easyWords,
-            medium: stats.mediumWords,
-            hard: stats.hardWords,
-            todayProgress: stats.studiedTodayCount,
             dailyGoal: stats.dailyGoal,
+            completedToday: stats.studiedTodayCount,
+            remainingWords: Math.max(0, stats.dailyGoal - stats.studiedTodayCount),
             streak: stats.streak,
-            completedDecks: stats.completedDecks,
-            notStartedDecks: allDecks.filter(d => d.words?.length > 0 && d.words.every(w => (w as any).status !== 'easy' && (w as any).status !== 'medium')).length,
+            hardWords: stats.hardWords,
+            mediumWords: stats.mediumWords,
+            easyWords: stats.easyWords,
             reviewNeeded: stats.reviewNeededWords,
+            lastStudyDate: studyDates.length > 0 ? studyDates[studyDates.length - 1] : '',
             userName: currentUser?.name || '학생'
           }}
           onAction={(action) => {

@@ -4,16 +4,15 @@ import { Sparkles, BookOpen, BrainCircuit, ChevronRight, Target, Flame, AlertCir
 import { Button, CardUI } from './UI';
 
 export interface CoachStats {
-  totalWords: number;
-  easy: number;
-  medium: number;
-  hard: number;
-  todayProgress: number;
   dailyGoal: number;
+  completedToday: number;
+  remainingWords: number;
   streak: number;
-  completedDecks: number;
-  notStartedDecks: number;
+  hardWords: number;
+  mediumWords: number;
+  easyWords: number;
   reviewNeeded: number;
+  lastStudyDate: string;
   userName: string;
 }
 
@@ -48,37 +47,86 @@ export const TypewriterText = ({ text, speed = 30 }: { text: string; speed?: num
 };
 
 // 2. Logic Functions
+const getRandomMessage = (messages: string[]) => {
+  return messages[Math.floor(Math.random() * messages.length)];
+};
+
 export const generateCoachMessage = (stats: CoachStats): string => {
-  if (stats.totalWords === 0) return "아직 학습 데이터가 많지 않아요. 첫 단어장부터 차근차근 시작해보세요.";
-  
-  const remainingToday = stats.dailyGoal - stats.todayProgress;
-  if (remainingToday > 0 && remainingToday <= 10) {
-    return `지금 ${remainingToday}개만 더 학습하면 오늘 목표를 달성할 수 있어요. 조금만 더 힘내세요!`;
+  const {
+    dailyGoal,
+    completedToday,
+    remainingWords,
+    streak,
+    hardWords,
+    mediumWords,
+    reviewNeeded,
+  } = stats;
+
+  // Priority 1: Goal completed
+  if (completedToday >= dailyGoal && dailyGoal > 0) {
+    return getRandomMessage([
+      "🎉 오늘 목표를 달성했어요! 정말 잘했어요.",
+      "오늘 목표 완료! 꾸준함이 실력을 만듭니다.",
+      "멋져요! 오늘 학습을 모두 완료했습니다."
+    ]);
   }
 
-  if (stats.hard > 0) {
-    return `오늘은 헷갈리는 단어 ${stats.hard}개를 먼저 복습해보는 건 어떨까요? 확실히 내 것으로 만들 수 있어요.`;
+  // Priority 2: Progress motivation
+  if (completedToday > 0) {
+    return getRandomMessage([
+      `좋아요! 지금 ${remainingWords}개만 더 학습하면 오늘 목표를 달성할 수 있어요.`,
+      `거의 다 왔어요. ${remainingWords}개만 더 학습하면 오늘 목표 완료!`,
+      `지금 학습 흐름이 좋아요. ${remainingWords}개만 더 해볼까요?`
+    ]);
   }
 
-  if (stats.streak >= 3) return `좋은 학습 습관이 형성되고 있어요. 최근 ${stats.streak}일 이상 꾸준히 학습하고 있어 기억 유지에 유리한 흐름입니다.`;
-  
-  if (stats.notStartedDecks > 0) return "아직 시작하지 않은 단어장이 남아 있어요. 지금 학습 흐름이 좋을 때 하나씩 시작해보면 좋습니다.";
-  
-  if (stats.completedDecks > 0) return "첫 단어장을 완료했어요. 학습 루틴이 잘 잡히고 있습니다.";
-  
-  return `${stats.userName}님, 오늘도 즐겁게 학습해볼까요?`;
+  // Priority 3: Streak motivation
+  if (streak > 0) {
+    return getRandomMessage([
+      `🔥 ${streak}일 연속 학습 중이에요. 오늘도 이어가 볼까요?`,
+      `${streak}일 연속 학습 기록이 유지되고 있어요!`,
+      `오늘 학습하면 ${streak + 1}일 연속 기록이 됩니다.`
+    ]);
+  }
+
+  // Priority 4: Review recommendation
+  if (mediumWords > 0 || reviewNeeded > 0 || hardWords > 0) {
+    if (mediumWords > 0) {
+      return getRandomMessage([
+        `헷갈리는 단어 ${mediumWords}개가 있어요. 먼저 복습해볼까요?`,
+        "어제 어려웠던 단어부터 다시 보면 좋아요."
+      ]);
+    }
+    return getRandomMessage([
+      `복습이 필요한 단어 ${reviewNeeded}개가 있습니다.`,
+      "어제 어려웠던 단어부터 다시 보면 좋아요."
+    ]);
+  }
+
+  // Priority 5: Start motivation
+  return getRandomMessage([
+    "오늘 학습을 아직 시작하지 않았어요. 지금 5분만 투자해볼까요?",
+    "지금 한 세트만 시작해보세요. 학습 흐름이 만들어질 거예요.",
+    `오늘 목표 ${dailyGoal}단어, 지금 시작하면 충분히 달성할 수 있어요.`
+  ]);
 };
 
 export const getCoachAction = (stats: CoachStats) => {
-  if (stats.totalWords === 0) return { label: "단어장 만들기", action: 'upload' };
-  if (stats.hard > 0) return { label: "헷갈림 복습하기", action: 'study' };
-  if (stats.notStartedDecks > 0) return { label: "단어장 시작하기", action: 'decks' };
-  return { label: "오늘 목표 채우기", action: 'study' };
+  if (stats.completedToday >= stats.dailyGoal && stats.dailyGoal > 0) return { label: "더 학습하기", action: 'decks' };
+  if (stats.completedToday > 0) return { label: "이어서 학습하기", action: 'study' };
+  if (stats.mediumWords > 0 || stats.reviewNeeded > 0) return { label: "복습 시작하기", action: 'study' };
+  return { label: "학습 시작하기", action: 'study' };
 };
 
 // 3. AICoachCard Component
 export const AICoachCard = ({ stats, onAction }: { stats: CoachStats; onAction: (action: string) => void }) => {
-  const message = generateCoachMessage(stats);
+  const [message, setMessage] = useState('');
+  
+  // Update message whenever stats change
+  useEffect(() => {
+    setMessage(generateCoachMessage(stats));
+  }, [stats.completedToday, stats.streak, stats.dailyGoal, stats.reviewNeeded, stats.mediumWords]);
+
   const action = getCoachAction(stats);
 
   return (
@@ -96,9 +144,9 @@ export const AICoachCard = ({ stats, onAction }: { stats: CoachStats; onAction: 
 
       <div className="flex flex-wrap gap-2 mb-6">
         <div className="px-3 py-1 bg-white rounded-full text-xs font-medium text-slate-600 border border-slate-200">연속 학습 {stats.streak}일</div>
-        <div className="px-3 py-1 bg-white rounded-full text-xs font-medium text-slate-600 border border-slate-200">오늘 {stats.todayProgress}/{stats.dailyGoal}</div>
+        <div className="px-3 py-1 bg-white rounded-full text-xs font-medium text-slate-600 border border-slate-200">오늘 {stats.completedToday}/{stats.dailyGoal}</div>
         <div className="px-3 py-1 bg-white rounded-full text-xs font-medium text-slate-600 border border-slate-200">복습 필요 {stats.reviewNeeded}개</div>
-        <div className="px-3 py-1 bg-white rounded-full text-xs font-medium text-slate-600 border border-slate-200">완료 {stats.completedDecks}개</div>
+        <div className="px-3 py-1 bg-white rounded-full text-xs font-medium text-slate-600 border border-slate-200">헷갈림 {stats.mediumWords}개</div>
       </div>
 
       <Button 
