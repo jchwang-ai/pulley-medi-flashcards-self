@@ -22,10 +22,11 @@ export const TypewriterText = ({ text, speed = 30 }: { text: string; speed?: num
 
   useEffect(() => {
     setDisplayedText('');
+    const characters = Array.from(text);
     let i = 0;
     const timer = setInterval(() => {
-      if (i < text.length) {
-        setDisplayedText((prev) => prev + text.charAt(i));
+      if (i < characters.length) {
+        setDisplayedText((prev) => prev + characters[i]);
         i++;
       } else {
         clearInterval(timer);
@@ -63,12 +64,8 @@ export const generateCoachMessage = (stats: CoachStats): string => {
   } = stats;
 
   // Priority 1: Goal completed
-  if (completedToday >= dailyGoal && dailyGoal > 0) {
-    return getRandomMessage([
-      "🎉 오늘 목표를 달성했어요! 정말 잘했어요.",
-      "오늘 목표 완료! 꾸준함이 실력을 만듭니다.",
-      "멋져요! 오늘 학습을 모두 완료했습니다."
-    ]);
+  if (remainingWords <= 0 && dailyGoal > 0) {
+    return "멋져요! 오늘 학습을 모두 완료했습니다. 🎉";
   }
 
   // Priority 2: Progress motivation
