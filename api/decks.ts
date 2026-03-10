@@ -87,13 +87,34 @@ export default async function handler(req: any, res: any) {
       const { userId } = req.query;
       if (!userId) return res.status(400).json({ error: "userId is required" });
       
+      // Get all decks
       const decks = await sql`
         SELECT id, name, category, words, created_at as "createdAt"
         FROM decks
         WHERE user_id = ${userId}
         ORDER BY created_at DESC
       `;
-      return res.status(200).json(decks);
+
+      // Get latest progress for each word
+      const progress = await sql`
+        SELECT DISTINCT ON (term) term, status
+        FROM card_progress
+        WHERE user_id = ${userId}
+        ORDER BY term, updated_at DESC
+      `;
+
+      const progressMap = new Map(progress.map((p: any) => [p.term, p.status]));
+
+      // Merge status into words
+      const decksWithProgress = decks.map((deck: any) => ({
+        ...deck,
+        words: (Array.isArray(deck.words) ? deck.words : []).map((word: any) => ({
+          ...word,
+          status: progressMap.get(word.term)
+        }))
+      }));
+
+      return res.status(200).json(decksWithProgress);
     }
 
     if (req.method === "POST") {

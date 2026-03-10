@@ -16,10 +16,12 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Missing userId' });
     }
 
+    // Get latest progress for each word
     const progress = await sql`
-      SELECT deck_id, term, status
+      SELECT DISTINCT ON (term) term, status
       FROM card_progress
       WHERE user_id = ${userId}
+      ORDER BY term, updated_at DESC
     `;
 
     const summary = {
